@@ -114,7 +114,6 @@ int main(int argc, char** argv) {
     exit(1);
 #endif
   bell::setDefaultLogger();
-  bell::enableTimestampLogging();
 #ifdef CSPOT_ENABLE_ALSA_SINK
   auto audioSink = std::make_unique<ALSAAudioSink>();
 #elif defined(CSPOT_ENABLE_PORTAUDIO_SINK)

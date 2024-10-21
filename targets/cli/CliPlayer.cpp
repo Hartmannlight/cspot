@@ -29,7 +29,7 @@ CliPlayer::CliPlayer(std::unique_ptr<AudioSink> sink,
       std::make_shared<bell::CentralAudioBuffer>(128 * 1024);
 
 #ifndef BELL_DISABLE_CODECS
-  this->dsp = std::make_shared<bell::BellDSP>(this->centralAudioBuffer);
+  this->dsp = std::make_shared<bell::BellDSP>();
 #endif
 
   auto hashFunc = std::hash<std::string_view>();
@@ -111,8 +111,8 @@ void CliPlayer::runTask() {
 
       if (!chunk || chunk->pcmSize == 0) {
         if (this->playlistEnd) {
-            this->handler->notifyAudioEnded();
-            this->playlistEnd = false;
+          this->handler->notifyAudioEnded();
+          this->playlistEnd = false;
         }
         BELL_SLEEP_MS(10);
         continue;
@@ -123,7 +123,8 @@ void CliPlayer::runTask() {
         }
 
 #ifndef BELL_DISABLE_CODECS
-        this->dsp->process(chunk->pcmData, chunk->pcmSize, 2, 44100,
+        this->dsp->process(chunk->pcmData, chunk->pcmSize, chunk->pcmData,
+                           chunk->pcmSize, 2, bell::SampleRate::SR_44100,
                            bell::BitWidth::BW_16);
 #endif
         this->audioSink->feedPCMFrames(chunk->pcmData, chunk->pcmSize);

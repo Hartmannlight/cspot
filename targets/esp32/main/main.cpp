@@ -277,7 +277,6 @@ void app_main(void) {
   //auto taskHandle = xTaskCreatePinnedToCore(&cspotTask, "cspot", 12*1024, NULL, 5, NULL, 1);
   /*auto taskHandle = */
   bell::setDefaultLogger();
-  bell::enableTimestampLogging();
   auto task = std::make_unique<CSpotTask>();
   vTaskSuspend(NULL);
 }
