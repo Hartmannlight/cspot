@@ -1,10 +1,10 @@
 #pragma once
 
-#include <iostream>
+#include <yajl_parse.h>
 #include <string>
+#include <tcb/span.hpp>
 #include "api/SpClient.h"
 #include "proto/ConnectPb.h"
-#include "tcb/span.hpp"
 
 namespace cspot {
 class ContextTrackResolver {
@@ -19,6 +19,8 @@ class ContextTrackResolver {
   void updateContext(const std::string& rootContextUrl,
                      std::optional<std::string>& currentTrackUid,
                      std::optional<std::string>& currentTrackUri);
+
+  bell::Result<> setShuffle(bool shuffle);
 
   bell::Result<cspot_proto::ContextTrack> getCurrentTrack();
 
@@ -73,37 +75,58 @@ class ContextTrackResolver {
     }
   };
 
-  // Represents a resolved context page, can either link to a page URL or be a root context
-  struct ResolvedContextPage {
-    int pageIndex = 0;  // Index of this page in the root context pages
-    std::optional<std::string> pageUrl = std::nullopt;
-    std::optional<TrackId> lastId = std::nullopt;
-    std::optional<TrackId> firstId = std::nullopt;
-    std::optional<std::string> nextPageUrl = std::nullopt;
-
-    std::vector<uint32_t> trackIndexes{};
-    uint32_t fetchWindowStart = 0;
-    uint32_t fetchWindowEnd = 0;
-
-    bool isInRoot = false;
-
-    // Implement comparison operator
-    bool operator==(const ResolvedContextPage& other) const {
-      return pageUrl == other.pageUrl && lastId == other.lastId &&
-             firstId == other.firstId && isInRoot == other.isInRoot;
-    }
+  struct PageWindow {
+    uint32_t size = 0;
+    uint32_t start = 0;
+    std::vector<uint32_t> shuffleIndexes;
   };
 
-  enum class FetchMode { Replace, AddPrevious, AddNext, Ignore };
+  struct PageMetadata {
+    std::optional<std::string> pageUrl;
+    std::optional<std::string> nextPageUrl;
+    uint32_t trackCount = 0;
+    bool isValid = false;
+  };
 
-  // Struct to hold the state of the context track parsing
-  struct FetchParameters {
-    FetchMode fetchMode = FetchMode::Replace;
-    bool slidingWindow = false;
-    uint32_t maxWindowSize = 0;
-    std::optional<TrackId> targetTrackId = std::nullopt;
-    std::vector<cspot_proto::ContextTrack>* trackCache = nullptr;
-    std::optional<uint32_t> targetPageIndex = std::nullopt;
+  struct PageParseState {
+    // Enumeration of possible parsing levels
+    enum Level {
+      ExpectKey,
+      InPagesArray,
+      InPageObject,
+      InTracksArray,
+      InTrackObject,
+      SkipValue
+    };
+    // Start with expecting a key
+    Level level = ExpectKey;
+
+    // Last key parsed, used to determine which field we are currently parsing
+    std::string lastKey;
+
+    // Current depth in the JSON structure
+    int depth = 0;
+
+    // Currently parsed page metadata
+    ContextTrackResolver::PageMetadata parsedPageMetadata;
+    cspot_proto::ContextTrack parsedTrack{};
+
+    // Indexes
+    uint32_t currentPageIndex = 0;
+    uint32_t trackIndexInPage = 0;
+
+    // Called when a new track is parsed
+    std::function<void(uint32_t pageIndex, uint32_t trackIndex,
+                       const cspot_proto::ContextTrack&)>
+        onTrackResolved;
+
+    // Called when a page metadata is parsed
+    std::function<void(uint32_t pageIndex,
+                       const ContextTrackResolver::PageMetadata&)>
+        onPageMetadataResolved;
+
+    // Holds static functions for the json parser
+    yajl_callbacks yajlCallbacks;
   };
 
  private:
@@ -116,33 +139,57 @@ class ContextTrackResolver {
 
   // Config
   TrackId currentTrackId;
-
   uint32_t maxWindowSize;
   uint32_t trackUpdateThreshold;
 
-  // Contains state for the context track parser
-  std::vector<ResolvedContextPage> resolvedContextPages;
+  // State for streaming parsing of context pages
+  PageParseState pageParseState;
 
-  std::vector<cspot_proto::ContextTrack> trackCache;
-  std::vector<cspot_proto::ContextTrack> unprocessedTracksCache;
+  // Whether the resolver is currently in a sliding window mode
+  bool isSlidingWindow = true;
+
+  // Temporary storage for the current track window
+  std::vector<cspot_proto::ContextTrack> currentTrackWindow;
+
+  // Holds page metadata for resolved pages
+  std::vector<PageMetadata> pageMetadata;
+
+  // Holds window metadata for resolved pages
+  std::vector<PageWindow> pageWindows;
+
+  TrackId targetTrackId;
+
+  // Index of current page in the metadata and window vectors
+  uint32_t currentPageIndex = 0;
+
+  bool isShuffle = false;
+
+  std::vector<cspot_proto::ContextTrack> contextTrackQueue;
+  cspot_proto::ContextIndex lowestWindowIndex{0, 0};
+  cspot_proto::ContextIndex highestWindowIndex{0, 0};
+
   std::optional<cspot_proto::ContextTrack> currentTrack;
 
-  std::optional<uint32_t> currentTrackInCacheIndex;
+  void onPageMetadataParsed(uint32_t pageIndex,
+                            const ContextTrackResolver::PageMetadata& metadata);
 
-  void prepareFetchParams(FetchParameters& fetchParameters,
-                          uint32_t fetchThreshold);
-
-  void updateTracks(
-      FetchMode fetchMode, std::vector<cspot_proto::ContextTrack>& parsedTracks,
-      const std::optional<cspot_proto::ContextTrack>& targetTrackResult);
-
-  bool isAtStartOfContext() const;
-  bool isAtEndOfContext() const;
+  void onTrackParsed(uint32_t pageIndex, uint32_t trackIndex,
+                     const cspot_proto::ContextTrack& track);
 
   bell::Result<> ensureContextTracks();
 
-  bell::Result<> resolveRootContext(FetchParameters& fetchParameters);
+  void setAdvanceWindow();
+  void setRetreatWindow();
 
-  bell::Result<> resolveContextPage(FetchParameters& fetchParameters);
+  void resetParseState();
+
+  void updateTracksFromWindow();
+
+  bell::Result<> shuffleIdsInPage(uint32_t pageIdx);
+
+  std::optional<uint32_t> getCurrentTrackInQueueIndex();
+
+  bell::Result<> resolveRootContext();
+  bell::Result<> resolveContextPage(uint32_t pageIndex);
 };
 }  // namespace cspot

@@ -494,3 +494,8 @@ enum SendCommandResult {
   DEVICE_DOES_NOT_SUPPORT_COMMAND = 6;
   RATE_LIMITED = 7;
 }
+
+message AutoplayContextRequest {
+    string context_uri = 1;
+    repeated string recent_track_uri = 2;
+}

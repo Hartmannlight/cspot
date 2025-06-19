@@ -38,5 +38,8 @@ class ConnectStateHandler {
                                        const tao::json::value& options);
 
   bell::Result<> handleSkipNextCommand();
+
+  bell::Result<> handleSkipPrevCommand();
+
 };
 }  // namespace cspot

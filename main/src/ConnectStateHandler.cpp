@@ -151,6 +151,9 @@ bell::Result<> ConnectStateHandler::handlePlayerCommand(
   } else if (endpoint == "skip_next") {
     BELL_LOG(info, LOG_TAG, "Received skip_next command");
     return handleSkipNextCommand();
+  } else if (endpoint == "skip_prev") {
+    BELL_LOG(info, LOG_TAG, "Received skip_prev command");
+    return handleSkipPrevCommand();
   } else {
     BELL_LOG(info, LOG_TAG, "Received unknown command: {}", endpoint);
     return std::errc::operation_not_supported;
@@ -272,6 +275,34 @@ bell::Result<> ConnectStateHandler::handleTransferCommand(
 
 bell::Result<> ConnectStateHandler::handleSkipNextCommand() {
   auto res = trackProvider->skipToNextTrack();
+  if (!res) {
+    BELL_LOG(error, LOG_TAG, "Failed to skip next track");
+    return res.getError();
+  }
+
+  auto& playerState = putStateRequestProto.device.playerState;
+  auto track = trackProvider->currentTrack();
+  if (track) {
+    playerState.track = *track;
+    playerState.index.hasValue = true;
+    playerState.index.value = trackProvider->currentContextIndex().value();
+  } else {
+    playerState.index.hasValue = false;
+  }
+
+  playerState.positionAsOfTimestamp = 0;
+  playerState.timestamp =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
+
+  putState();
+
+  return {};
+}
+
+bell::Result<> ConnectStateHandler::handleSkipPrevCommand() {
+  auto res = trackProvider->skipToPreviousTrack();
   if (!res) {
     BELL_LOG(error, LOG_TAG, "Failed to skip next track");
     return res.getError();

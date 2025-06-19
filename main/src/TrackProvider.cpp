@@ -86,6 +86,44 @@ bell::Result<> TrackProvider::skipToNextTrack(
 
 bell::Result<> TrackProvider::skipToPreviousTrack(
     cspot_proto::ContextTrack* track) {
+  auto currentTrackRes = contextTrackResolver->getCurrentTrack();
+  if (!currentTrackRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to resolve current track");
+    return currentTrackRes.getError();
+  }
+
+  auto res = contextTrackResolver->previous();
+  if (!res) {
+    BELL_LOG(error, LOG_TAG, "Failed to resolve next track");
+    return res.getError();
+  }
+
+  previousTracks.clear();
+  nextTracks.clear();
+
+  // Add up to maxEncodedTracksWindow from context resolver to the previous tracks
+  auto prevCtx = contextTrackResolver->previousTracks();
+  for (auto it = prevCtx.rbegin(); it != prevCtx.rend(); ++it) {
+    previousTracks.push_back(
+        {.uri = it->uri, .uid = it->uid, .provider = "context"});
+
+    if (previousTracks.size() >= maxEncodedTracksWindow) {
+      break;
+    }
+  }
+  std::reverse(previousTracks.begin(), previousTracks.end());
+
+  // Add up to maxEncodedTracksWindow from context resolver to the next tracks
+  auto nextCtx = contextTrackResolver->nextTracks();
+  for (auto* it = nextCtx.begin(); it != nextCtx.end(); ++it) {
+    nextTracks.push_back(
+        {.uri = it->uri, .uid = it->uid, .provider = "context"});
+
+    if (nextTracks.size() >= maxEncodedTracksWindow) {
+      break;
+    }
+  }
+
   return {};
 }
 
@@ -128,6 +166,9 @@ bell::Result<> TrackProvider::loadTrackAndContext(
     BELL_LOG(error, LOG_TAG, "Failed to resolve current track");
     return currentTrackRes.getError();
   }
+
+  // Set shuffle context
+  // contextTrackResolver->setShuffle(true);
 
   auto prevCtx = contextTrackResolver->previousTracks();
   for (auto it = prevCtx.rbegin(); it != prevCtx.rend(); ++it) {

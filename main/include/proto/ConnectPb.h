@@ -414,3 +414,20 @@ struct TransferState {
 }  // namespace cspot_proto
 
 NANOPB_STRUCT(cspot_proto::TransferState, TransferState_fields)
+
+namespace cspot_proto {
+struct AutoplayContextRequest {
+  std::string contextUrl;
+  std::vector<std::string> recentTrackUri;
+
+  static auto bindFields(AutoplayContextRequest* self, bool isDecode) {
+    _AutoplayContextRequest rawProto = AutoplayContextRequest_init_zero;
+    nanopb_helper::bindField(rawProto.context_uri, self->contextUrl, isDecode);
+    nanopb_helper::bindField(rawProto.recent_track_uri, self->recentTrackUri,
+                             isDecode);
+    return rawProto;
+  }
+};
+}  // namespace cspot_proto
+
+NANOPB_STRUCT(cspot_proto::AutoplayContextRequest, AutoplayContextRequest_fields)

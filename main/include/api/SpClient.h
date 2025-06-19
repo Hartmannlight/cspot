@@ -9,7 +9,6 @@
 
 // Protobufs
 #include "bell/http/Reader.h"
-#include "connect.pb.h"
 
 #include "SessionContext.h"
 #include "proto/ConnectPb.h"
@@ -25,6 +24,9 @@ class SpClient {
   bell::Result<> putConnectState(cspot_proto::PutStateRequest& stateRequest,
                                  int retryCount = 3);
   bell::Result<bell::HTTPReader> contextResolve(const std::string& contextUri);
+
+  bell::Result<bell::HTTPReader> contextAutoplayResolve(
+      cspot_proto::AutoplayContextRequest& request);
 
   bell::Result<bell::HTTPReader> doRequest(bell::HTTPMethod method,
                                            const std::string& requestUrl);

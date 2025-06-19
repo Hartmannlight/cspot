@@ -123,9 +123,56 @@ bell::Result<bell::HTTPReader> SpClient::contextResolve(
   return response;
 }
 
+bell::Result<bell::HTTPReader> SpClient::contextAutoplayResolve(
+    cspot_proto::AutoplayContextRequest& request) {
+  auto addrRes = sessionContext->credentialsResolver->getApAddress(
+      CredentialsResolver::AddressType::SpClient);
+
+  if (!addrRes) {
+    return addrRes.getError();
+  }
+
+  std::string spClientAddress = addrRes.takeValue();
+
+  auto keyRes = sessionContext->credentialsResolver->getAccessKey();
+  if (!keyRes) {
+    return keyRes.getError();
+  }
+  auto accessToken = keyRes.takeValue();
+
+  auto clientTokenRes = sessionContext->credentialsResolver->getClientToken();
+  if (!clientTokenRes) {
+    return clientTokenRes.getError();
+  }
+  auto clientToken = clientTokenRes.takeValue();
+
+  std::vector<uint8_t> encodedBytes{};
+  bool encodeResult = nanopb_helper::encodeToVector(request, encodedBytes);
+  if (!encodeResult) {
+    BELL_LOG(error, LOG_TAG, "Error while encoding AutoplayContextRequest");
+    return std::errc::bad_message;
+  }
+
+  auto response = bell::http::requestWithBodyPtr(
+      bell::HTTPMethod::POST,
+      fmt::format("https://{}/context-resolve/v1/autoplay", spClientAddress),
+      {
+          {"Client-Token", clientToken},
+          {"Authorization", fmt::format("Bearer {}", accessToken)},
+      },
+      reinterpret_cast<std::byte*>(encodedBytes.data()), encodedBytes.size());
+
+  if (!response) {
+    BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
+             response.errorMessage());
+    return response.getError();
+  }
+
+  return response;
+}
+
 bell::Result<bell::HTTPReader> SpClient::doRequest(
     bell::HTTPMethod method, const std::string& requestUrl) {
-  std::cout << requestUrl << std::endl;
 
   auto addrRes = sessionContext->credentialsResolver->getApAddress(
       CredentialsResolver::AddressType::SpClient);

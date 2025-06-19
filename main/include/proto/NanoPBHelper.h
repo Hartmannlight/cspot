@@ -246,7 +246,7 @@ struct StructCodec {
   namespace nanopb_helper {                                                    \
   template <>                                                                  \
   struct StructCodec<StructName> {                                             \
-    static bool decode(pb_istream_t* s, const pb_field_t* f, void** a) {       \
+    static bool decode(pb_istream_t* s, const pb_field_t* /*f*/, void** a) {       \
       auto proto = StructName::bindFields(static_cast<StructName*>(*a), true); \
       return pb_decode(s, NanopbFields, &proto);                               \
     }                                                                          \
@@ -259,7 +259,7 @@ struct StructCodec {
           StructName::bindFields(static_cast<StructName*>(*a), false);         \
       return pb_encode_submessage(s, NanopbFields, &proto);                    \
     }                                                                          \
-    static bool encode(pb_ostream_t* s, const pb_field_t* f, void* const* a) { \
+    static bool encode(pb_ostream_t* s, const pb_field_t* /*f*/, void* const* a) { \
       auto proto =                                                             \
           StructName::bindFields(static_cast<StructName*>(*a), false);         \
       return pb_encode(s, NanopbFields, &proto);                               \

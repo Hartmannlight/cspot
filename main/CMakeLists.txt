@@ -46,8 +46,11 @@ list(APPEND EXTRA_LIBS websockets)
 
 # Include picoJSON
 add_subdirectory(../external/picojson ${CMAKE_CURRENT_BINARY_DIR}/picojson)
-
 list(APPEND EXTRA_LIBS picojson)
+
+# Include yajl
+add_subdirectory(../external/yajl ${CMAKE_CURRENT_BINARY_DIR}/yajl)
+list(APPEND EXTRA_LIBS yajl)
 
 # Add nanopb module
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/../external/nanopb/extra)
@@ -58,7 +61,8 @@ file(GLOB PROTOS ${CMAKE_CURRENT_SOURCE_DIR}/../protobuf/*.proto)
 nanopb_generate_cpp(TARGET cspot-proto ${PROTOS})
 list(APPEND EXTRA_LIBS cspot-proto)
 target_compile_definitions(cspot-proto PUBLIC PB_ENABLE_MALLOC)
-target_compile_options(websockets INTERFACE -Wno-null-pointer-subtraction -Wno-template-id-cdtor)
+target_compile_options(websockets INTERFACE -Wno-null-pointer-subtraction) #no-template-id-cdtor
+# disable no-template-id-cdtor if such warning exists
 
 # target_compile_definitions(cspot-proto PUBLIC PB_FIELD_32BIT)
 add_library(cspot STATIC ${SOURCES} ${PROTO_SRCS})
