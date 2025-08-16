@@ -22,6 +22,11 @@ file(GLOB SOURCES "src/*.cpp" "src/events/*.cpp" "src/*.c" "src/api/*.cpp" "src/
 
 # Enable testing
 if(NOT CSPOT_DISABLE_TESTS)
+    # Trompeloeil for mocking
+    add_subdirectory(../external/bell/external/trompeloeil ${CMAKE_CURRENT_BINARY_DIR}/trompeloeil)
+    # Doctest for unit testing
+    add_subdirectory(../external/bell/external/doctest ${CMAKE_CURRENT_BINARY_DIR}/doctest)
+
     enable_testing()
     add_subdirectory("../test" ${CMAKE_CURRENT_BINARY_DIR}/test)
 endif()

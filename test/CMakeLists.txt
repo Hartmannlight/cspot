@@ -6,13 +6,12 @@ set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTOR
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
 set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
 
-find_package(Catch2 REQUIRED)
-include(Catch)
+include(../external/bell/external/doctest/scripts/cmake/doctest.cmake)
 
 add_executable(cspot-test
   main.cpp ApResolveTest.cpp
 )
 target_compile_options(cspot-test PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
-target_link_libraries(cspot-test cspot Catch2::Catch2)
+target_link_libraries(cspot-test cspot doctest::doctest trompeloeil::trompeloeil)
 
-# catch_discover_tests(cspot-test)
+doctest_discover_tests(cspot-test)

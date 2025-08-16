@@ -6,13 +6,14 @@
 #include <vector>
 
 #include "bell/Result.h"
+#include "bell/http/Client.h"
 
 #include "LoginBlob.h"
 
 namespace cspot {
 class CredentialsResolver {
  public:
-  CredentialsResolver(std::shared_ptr<LoginBlob> loginBlob);
+  CredentialsResolver(std::shared_ptr<bell::HTTPClient> httpClient, std::shared_ptr<LoginBlob> loginBlob);
 
   // Enumeration of the endpoint types
   enum class AddressType {
@@ -69,6 +70,7 @@ class CredentialsResolver {
  private:
   const char* LOG_TAG = "CredentialsResolver";
 
+  std::shared_ptr<bell::HTTPClient> httpClient;
   std::shared_ptr<LoginBlob> loginBlob;
 
   // Cached

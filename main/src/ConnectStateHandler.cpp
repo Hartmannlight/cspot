@@ -195,10 +195,10 @@ bell::Result<> ConnectStateHandler::handleTransferCommand(
     return bell::make_unexpected_errc(std::errc::bad_message);
   }
 
-  std::vector<uint8_t> decodedData(olen);
+  std::vector<std::byte> decodedData(olen);
   // Decode the base64 data
   base64DecodeRes = mbedtls_base64_decode(
-      decodedData.data(), decodedData.size(), &olen,
+      reinterpret_cast<uint8_t*>(decodedData.data()), decodedData.size(), &olen,
       reinterpret_cast<const uint8_t*>(payloadDataStr.data()),
       payloadDataStr.size());
   if (base64DecodeRes != 0) {

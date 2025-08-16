@@ -42,8 +42,10 @@ const std::string dealerKey = "dealer-g2";
 const std::string spClientKey = "spclient";
 }  // namespace
 
-CredentialsResolver::CredentialsResolver(std::shared_ptr<LoginBlob> loginBlob)
-    : loginBlob(std::move(loginBlob)) {
+CredentialsResolver::CredentialsResolver(
+    std::shared_ptr<bell::HTTPClient> httpClient,
+    std::shared_ptr<LoginBlob> loginBlob)
+    : httpClient(std::move(httpClient)), loginBlob(std::move(loginBlob)) {
   // Set expiration time to now, will be updated on first call
   this->addressesExpiresAt =
       std::chrono::system_clock::now() - std::chrono::hours(1);
@@ -115,13 +117,13 @@ bell::Result<> CredentialsResolver::updateAddresses() {
   std::scoped_lock lock(this->accessMutex);
 
   // Fetch new addresses
-  auto response = bell::http::request(bell::HTTPMethod::GET, apResolveUrl);
+  auto response = httpClient->get(apResolveUrl);
   if (!response) {
     return tl::make_unexpected(response.error());
   }
 
-  if (response->getStatusCode() == 200) {
-    auto responseStr = *response->getBodyStringView();
+  if (response->statusCode == 200) {
+    auto responseStr = *response->text();
 
     // parse json
     const auto& json = tao::json::from_string(responseStr);
@@ -205,28 +207,27 @@ bell::Result<> CredentialsResolver::updateAccessKey() {
     return tl::make_unexpected(res.error());
   }
 
-  auto httpConnectionResponse = bell::http::requestWithBody(
-      bell::HTTPMethod::POST, "https://login5.spotify.com/v3/login",
-      {{"Accept", "application/x-protobuf"},
-       {
-           "Content-Type",
-           "application/x-protobuf",
-       },
-       {"Client-Token", *tokenRes}},
-      encodedBuffer);
+  auto httpConnectionResponse =
+      httpClient->post("https://login5.spotify.com/v3/login",
+                       {{"Accept", "application/x-protobuf"},
+                        {
+                            "Content-Type",
+                            "application/x-protobuf",
+                        },
+                        {"Client-Token", *tokenRes}},
+                       encodedBuffer);
   if (!httpConnectionResponse) {
     return tl::make_unexpected(httpConnectionResponse.error());
   }
 
-  if (httpConnectionResponse->getStatusCode() == 200) {
+  if (httpConnectionResponse->statusCode == 200) {
     loginResponse.ok.access_token.funcs.decode = &cspot::pbDecodeString;
     loginResponse.ok.access_token.arg = &this->accessKey;
 
-    auto decodeRes =
-        pbDecodeMessage(reinterpret_cast<const uint8_t*>(
-                            *httpConnectionResponse->getBodyBytesPtr()),
-                        *httpConnectionResponse->getBodyBytesLength(),
-                        LoginResponse_fields, &loginResponse);
+    auto decodeRes = pbDecodeMessage(
+        reinterpret_cast<const uint8_t*>(*httpConnectionResponse->bytesPtr()),
+        *httpConnectionResponse->bytesLength(), LoginResponse_fields,
+        &loginResponse);
 
     if (!decodeRes) {
       return decodeRes;
@@ -249,7 +250,7 @@ bell::Result<> CredentialsResolver::updateAccessKey() {
   } else {
     BELL_LOG(error, LOG_TAG,
              "Error while fetching access key (HTTP status code): {}",
-             *httpConnectionResponse->getStatusCode());
+             httpConnectionResponse->statusCode);
     return bell::make_unexpected_errc(
         std::errc::resource_unavailable_try_again);
   }
@@ -304,31 +305,32 @@ bell::Result<> CredentialsResolver::updateClientToken() {
   }
   auto startTime = std::chrono::system_clock::now();
 
-  auto httpConnectionResponse = bell::http::requestWithBody(
-      bell::HTTPMethod::POST, "https://clienttoken.spotify.com/v1/clienttoken",
-      {{"Accept", "application/x-protobuf"},
-       {
-           "Content-Type",
-           "application/x-protobuf",
-       }},
-      encodedBuffer);
+  auto httpConnectionResponse =
+      httpClient->post("https://clienttoken.spotify.com/v1/clienttoken",
+                       {{"Accept", "application/x-protobuf"},
+                        {
+                            "Content-Type",
+                            "application/x-protobuf",
+                        }},
+                       encodedBuffer);
   auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::system_clock::now() - startTime).count();
+                       std::chrono::system_clock::now() - startTime)
+                       .count();
   if (!httpConnectionResponse) {
     return tl::make_unexpected(httpConnectionResponse.error());
   }
 
-  if (httpConnectionResponse->getContentLength() > 0) {
+  if (httpConnectionResponse->contentLength > 0) {
     ClientTokenResponse tokenResponse = ClientTokenResponse_init_zero;
     std::string clientTokenString;
 
     tokenResponse.granted_token.token.funcs.decode = &pbDecodeString;
     tokenResponse.granted_token.token.arg = &clientTokenString;
 
-    auto res = pbDecodeMessage(reinterpret_cast<const uint8_t*>(
-                                   *httpConnectionResponse->getBodyBytesPtr()),
-                               *httpConnectionResponse->getBodyBytesLength(),
-                               ClientTokenResponse_fields, &tokenResponse);
+    auto res = pbDecodeMessage(
+        reinterpret_cast<const uint8_t*>(*httpConnectionResponse->bytesPtr()),
+        *httpConnectionResponse->bytesLength(), ClientTokenResponse_fields,
+        &tokenResponse);
 
     if (!res) {
       return res;
@@ -340,8 +342,8 @@ bell::Result<> CredentialsResolver::updateClientToken() {
         std::chrono::system_clock::now() +
         std::chrono::seconds(tokenResponse.granted_token.expires_after_seconds);
 
-
-    BELL_LOG(debug, LOG_TAG, "Client token received, expires in {}, elapsedMs={}",
+    BELL_LOG(debug, LOG_TAG,
+             "Client token received, expires in {}, elapsedMs={}",
              tokenResponse.granted_token.expires_after_seconds, elapsedMs);
   }
 

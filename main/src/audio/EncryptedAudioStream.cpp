@@ -53,12 +53,12 @@ EncryptedAudioStream::~EncryptedAudioStream() {
 }
 
 bell::Result<> EncryptedAudioStream::open() {
-  httpConnection = std::make_unique<bell::http::Connection>();
+  // httpConnection = std::make_unique<bell::http::Connection>();
 
-  auto res = httpConnection->connect(cdnUrl, 5000);
-  if (!res) {
-    return res;
-  }
+  // auto res = httpConnection->connect(cdnUrl, 5000);
+  // if (!res) {
+  //   return res;
+  // }
 
   return {};
 }
@@ -117,13 +117,14 @@ bool EncryptedAudioStream::isExpired() const {
 }
 
 bool EncryptedAudioStream::isOpen() const {
-  return httpConnection != nullptr;
+  // return httpConnection != nullptr;
+  return true;
 }
 
 void EncryptedAudioStream::close() {
-  if (httpConnection) {
-    httpConnection.reset();
-  }
+  // if (httpConnection) {
+  //   httpConnection.reset();
+  // }
   connectionBuffer.clear();
   totalContentLength = 0;
   ivPosition = 0;

@@ -422,13 +422,14 @@ struct StructCodec {
   }
 
 template <typename MessageT>
-bool encodeToVector(MessageT& message, std::vector<uint8_t>& output) {
+bool encodeToVector(MessageT& message, std::vector<std::byte>& output) {
   // Actual encoding
   pb_ostream_t stream;
   stream.callback = [](pb_ostream_t* stream, const pb_byte_t* buf,
                        size_t count) -> bool {
-    auto* vec = static_cast<std::vector<uint8_t>*>(stream->state);
-    vec->insert(vec->end(), buf, buf + count);
+    auto* vec = static_cast<std::vector<std::byte>*>(stream->state);
+    vec->insert(vec->end(), reinterpret_cast<const std::byte*>(buf),
+                reinterpret_cast<const std::byte*>(buf + count));
     return true;
   };
   stream.state = &output;
@@ -452,7 +453,7 @@ bool decodeFromBuffer(MessageT& message, const uint8_t* buffer,
 }
 
 template <typename MessageT>
-bool decodeFromVector(MessageT& message, const std::vector<uint8_t>& input) {
+bool decodeFromVector(MessageT& message, const std::vector<std::byte>& input) {
   return decodeFromBuffer(message, input.data(), input.size());
 }
 

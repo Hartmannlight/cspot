@@ -20,9 +20,10 @@ ApConnection::ApConnection(std::shared_ptr<SessionContext> sessionContext)
     : sessionContext(std::move(sessionContext)) {}
 
 bell::Result<> ApConnection::connect() {
-
+  BELL_LOG(debug, LOG_TAG, "Connecting to AP");
   auto addr = sessionContext->credentialsResolver->getApAddress(
       CredentialsResolver::AddressType::AccessPoint);
+  BELL_LOG(debug, LOG_TAG, "Got AP address");
   if (!addr) {
     BELL_LOG(error, LOG_TAG, "Could not resolve AP address: {}", addr.error());
     return tl::make_unexpected<>(addr.error());
@@ -175,7 +176,7 @@ bell::Result<> ApConnection::sendClientHelloPacket() {
     nonceByte = rand() % 256;
   }
 
-  std::vector<uint8_t> encodedHelloPacket = {};
+  std::vector<std::byte> encodedHelloPacket = {};
   auto encodeRes =
       nanopb_helper::encodeToVector(pbClientHello, encodedHelloPacket);
 
@@ -281,7 +282,7 @@ bell::Result<> ApConnection::solveHelloChallenge(
   return {};
 }
 
-bell::Result<> ApConnection::sendPlainPacket(const uint8_t* data, size_t len,
+bell::Result<> ApConnection::sendPlainPacket(const std::byte* data, size_t len,
                                              std::optional<uint16_t> cmd) {
   // Send the packet size
   uint32_t packetSize = htonl(len + 4 + (cmd.has_value() ? 2 : 0));
@@ -296,8 +297,8 @@ bell::Result<> ApConnection::sendPlainPacket(const uint8_t* data, size_t len,
     if (state != State::CONNECTED_SHANNON) {
       accumulatedExchangeBuffer.insert(
           accumulatedExchangeBuffer.end(),
-          reinterpret_cast<const uint8_t*>(&prefix),
-          reinterpret_cast<const uint8_t*>(&prefix) + sizeof(uint16_t));
+          reinterpret_cast<const std::byte*>(&prefix),
+          reinterpret_cast<const std::byte*>(&prefix) + sizeof(uint16_t));
     }
   }
   auto res = apSock->write(reinterpret_cast<const uint8_t*>(&packetSize),
@@ -309,12 +310,12 @@ bell::Result<> ApConnection::sendPlainPacket(const uint8_t* data, size_t len,
   if (state != State::CONNECTED_SHANNON) {
     accumulatedExchangeBuffer.insert(
         accumulatedExchangeBuffer.end(),
-        reinterpret_cast<const uint8_t*>(&packetSize),
-        reinterpret_cast<const uint8_t*>(&packetSize) + sizeof(packetSize));
+        reinterpret_cast<const std::byte*>(&packetSize),
+        reinterpret_cast<const std::byte*>(&packetSize) + sizeof(packetSize));
   }
 
   // Send the packet data
-  res = apSock->write(data, len);
+  res = apSock->write(reinterpret_cast<const uint8_t*>(data), len);
   if (!res) {
     return tl::make_unexpected(res.error());
   }

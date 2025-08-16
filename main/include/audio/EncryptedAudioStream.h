@@ -43,8 +43,6 @@ class EncryptedAudioStream {
   // Decrypts the read data from CDN, using the provided audio key & IV
   bell::Result<> decryptData(uint8_t* data, size_t size, size_t position);
 
-  std::unique_ptr<bell::http::Connection> httpConnection;
-
   // Buffer for http data
   std::vector<char> connectionBuffer;
 

@@ -5,12 +5,12 @@
 #include <vector>
 
 // Library includes
-#include <bell/Result.h>
-
-// Protobufs
-#include "bell/http/Reader.h"
+#include "bell/Result.h"
+#include "bell/http/Client.h"
 
 #include "SessionContext.h"
+
+// Protobufs
 #include "proto/ConnectPb.h"
 #include "proto/MetadataPb.h"
 #include "proto/SpotifyId.h"
@@ -18,18 +18,14 @@
 namespace cspot {
 class SpClient {
  public:
-  SpClient(std::shared_ptr<SessionContext> sessionContext);
+  SpClient(std::shared_ptr<bell::HTTPClient> httpClient,
+           std::shared_ptr<SessionContext> sessionContext);
 
-  bell::Result<> putConnectStateInactive(int retryCount = 3);
-  bell::Result<> putConnectState(cspot_proto::PutStateRequest& stateRequest,
-                                 int retryCount = 3);
-  bell::Result<bell::HTTPReader> contextResolve(const std::string& contextUri);
+  bell::Result<> putConnectState(cspot_proto::PutStateRequest& stateRequest);
+  bell::Result<bell::HTTPResponse> contextResolve(const std::string& contextUri);
 
-  bell::Result<bell::HTTPReader> contextAutoplayResolve(
+  bell::Result<bell::HTTPResponse> contextAutoplayResolve(
       cspot_proto::AutoplayContextRequest& request);
-
-  bell::Result<bell::HTTPReader> doRequest(bell::HTTPMethod method,
-                                           const std::string& requestUrl);
 
   bell::Result<cspot_proto::Track> trackMetadata(const SpotifyId& trackId);
 
@@ -42,7 +38,16 @@ class SpClient {
  private:
   const char* LOG_TAG = "SpClient";
 
+  std::shared_ptr<bell::HTTPClient> httpClient;
   std::shared_ptr<SessionContext> sessionContext;
   std::vector<std::uint8_t> requestBuffer;
+
+  // Credentials fetched from CredentialResolver
+  std::string accessToken;
+  std::string clientToken;
+  std::string spClientAddress;
+
+  // Updates credentials if expired
+  bell::Result<> updateCredentials();
 };
 }  // namespace cspot

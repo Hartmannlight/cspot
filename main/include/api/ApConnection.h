@@ -26,7 +26,7 @@ class ApConnection {
 
   // Type for the packet handler function
   using ConnectionPacketHandler =
-      std::function<void(uint8_t packetType, const uint8_t* data, size_t len)>;
+      std::function<void(uint8_t packetType, const std::byte* data, size_t len)>;
 
   /**
    * @brief Connects to the AP, address fetched from the credential resolver
@@ -40,7 +40,7 @@ class ApConnection {
    * @param packetData Buffer containing the packet data
    * @param packetSize Size of the packet data
    */
-  bell::Result<> sendPacket(uint8_t cmd, const uint8_t* packetData,
+  bell::Result<> sendPacket(uint8_t cmd, const std::byte* packetData,
                             uint16_t packetSize);
 
   /**
@@ -88,10 +88,10 @@ class ApConnection {
   cspot_proto::ClientResponsePlaintext pbClientResponse{};
   cspot_proto::ClientResponseEncrypted pbClientResponseEncrypted{};
 
-  std::vector<uint8_t> connectionBuffer;
+  std::vector<std::byte> connectionBuffer;
 
   // Holds the initially transferred messages, used for the handshake challenge
-  std::vector<uint8_t> accumulatedExchangeBuffer;
+  std::vector<std::byte> accumulatedExchangeBuffer;
 
   // Packet handler for incoming packets
   ConnectionPacketHandler packetHandler = nullptr;
@@ -99,10 +99,10 @@ class ApConnection {
   void handleRead();
 
   bell::Result<> sendClientHelloPacket();
-  bell::Result<> solveHelloChallenge(const uint8_t* apResponsePacket,
+  bell::Result<> solveHelloChallenge(const std::byte* apResponsePacket,
                                      size_t apResponsePacketSize);
 
-  bell::Result<> sendPlainPacket(const uint8_t* data, size_t len,
+  bell::Result<> sendPlainPacket(const std::byte* data, size_t len,
                                  std::optional<uint16_t> cmd);
 
   bell::Result<size_t> receivePlainPacket();
