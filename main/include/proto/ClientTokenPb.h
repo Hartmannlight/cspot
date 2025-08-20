@@ -3,8 +3,8 @@
 #include "proto/NanoPBHelper.h"
 
 // Protobuf includes
-#include "connectivity.pb.h"
 #include "clienttoken.pb.h"
+#include "connectivity.pb.h"
 
 namespace cspot_proto {
 struct NativeDesktopLinuxData {
@@ -98,7 +98,7 @@ struct ClientTokenRequest {
     _ClientTokenRequest rawProto = ClientTokenRequest_init_zero;
 
     nanopb_helper::bindField(rawProto.request_type, self->requestType,
-                                   isDecode);
+                             isDecode);
     nanopb_helper::bindField(rawProto.client_data, self->clientData, isDecode);
     return rawProto;
   }
@@ -110,8 +110,8 @@ NANOPB_STRUCT(cspot_proto::ClientTokenRequest, ClientTokenRequest_fields);
 namespace cspot_proto {
 struct GrantedTokenResponse {
   std::string token;
-  int32_t expiresAfterSeconds;
-  int32_t refreshAfterSeconds;
+  uint32_t expiresAfterSeconds;
+  uint32_t refreshAfterSeconds;
   static auto bindFields(GrantedTokenResponse* self, bool isDecode) {
     _GrantedTokenResponse rawProto = GrantedTokenResponse_init_zero;
 
@@ -137,7 +137,7 @@ struct ClientTokenResponse {
     _ClientTokenResponse rawProto = ClientTokenResponse_init_zero;
 
     nanopb_helper::bindField(rawProto.response_type, self->responseType,
-                                   isDecode);
+                             isDecode);
     nanopb_helper::bindField(rawProto.granted_token, self->grantedToken,
                              isDecode);
 

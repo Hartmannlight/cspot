@@ -1,228 +1,318 @@
-// #include "api/SpClient.h"
+#include "api/SpClient.h"
 
-// #include <fmt/format.h>
-// #include <iostream>
-// #include <memory>
-// #include <tao/json.hpp>
-// #include "api/CredentialsResolver.h"
-// #include "bell/Logger.h"
-// #include "bell/Result.h"
-// #include "bell/http/Client.h"
-// #include "bell/http/Common.h"
-// #include "tl/expected.hpp"
+#include <iomanip>
+#include <memory>
+#include <sstream>
 
-// using namespace cspot;
+// Library includes
+#include "bell/http/Client.h"
+#include "tao/json.hpp"
 
-// SpClient::SpClient(std::shared_ptr<bell::HTTPClient> httpClient,
-//                    std::shared_ptr<SessionContext> sessionContext)
-//     : httpClient(std::move(httpClient)),
-//       sessionContext(std::move(sessionContext)) {}
+#include "api/CredentialsResolver.h"
+#include "proto/MetadataPb.h"
 
-// bell::Result<> SpClient::putConnectState(
-//     cspot_proto::PutStateRequest& stateRequest) {
-//   auto credentialsRes = updateCredentials();
-//   if (!credentialsRes) {
-//     // Could not fetch credentials
-//     return credentialsRes;
-//   }
+using namespace cspot;
 
-//   std::vector<std::byte> freshBuffer;
-//   auto encodeRes = nanopb_helper::encodeToVector(stateRequest, freshBuffer);
+namespace {
+class DefaultSpClient : public SpClient {
+ public:
+  DefaultSpClient(std::shared_ptr<bell::HTTPClient> httpClient,
+                  std::shared_ptr<CredentialsResolver> credentialsResolver)
+      : httpClient(std::move(httpClient)),
+        credentialsResolver(std::move(credentialsResolver)) {}
 
-//   if (!encodeRes) {
-//     BELL_LOG(error, LOG_TAG, "Error while encoding message");
-//     return bell::make_unexpected_errc(std::errc::bad_message);
-//   }
+  bell::Result<> putConnectState(cspot_proto::PutStateRequest& stateRequest,
+                                 const std::string& deviceId) override;
+  bell::Result<bell::HTTPResponse> contextResolve(
+      const std::string& contextUri) override;
+  bell::Result<bell::HTTPResponse> contextAutoplayResolve(
+      cspot_proto::AutoplayContextRequest& request) override;
+  bell::Result<bell::HTTPResponse> rawRequest(const std::string& uri) override;
 
-//   uint32_t salt = std::rand();
-//   auto httpResponse = httpClient->put(
-//       fmt::format("https://{}/connect-state/v1/devices/{}?product=0&salt={}",
-//                   spClientAddress, sessionContext->sessionInfo->deviceId, salt),
-//       {
-//           {
-//               "Content-Type",
-//               "application/x-protobuf",
-//           },
-//           {"X-Spotify-Connection-Id", sessionContext->sessionInfo->sessionId},
-//           {"Authorization", fmt::format("Bearer {}", accessToken)},
-//       },
-//       tcb::span(reinterpret_cast<std::byte*>(freshBuffer.data()),
-//                 freshBuffer.size()));
+  bell::Result<cspot_proto::Track> trackMetadata(
+      const SpotifyId& trackId) override;
 
-//   if (!httpResponse) {
-//     BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
-//              httpResponse.error());
-//     return tl::make_unexpected(httpResponse.error());
-//   }
+  bell::Result<cspot_proto::Episode> episodeMetadata(
+      const SpotifyId& episodeId) override;
 
-//   if (httpResponse->statusCode != 200) {
-//     BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
-//              httpResponse->statusCode);
-//     return bell::make_unexpected_errc(std::errc::bad_message);
-//   }
+  bell::Result<std::string> resolveStorageInteractive(
+      const std::vector<std::byte>& fileId, bool prefetch = false) override;
 
-//   return {};
-// }
+ private:
+  const char* LOG_TAG = "SpClient";
 
-// bell::Result<std::string> SpClient::resolveStorageInteractive(
-//     const std::vector<std::byte>& fileId, bool prefetch) {
-//   auto credentialsRes = updateCredentials();
-//   if (!credentialsRes) {
-//     // Could not fetch credentials
-//     return tl::make_unexpected(credentialsRes.error());
-//   }
+  std::shared_ptr<bell::HTTPClient> httpClient;
+  std::shared_ptr<CredentialsResolver> credentialsResolver;
 
-//   std::stringstream ss;
-//   ss << std::hex << std::setfill('0');  // Set hex output and pad with '0'
+  // Cached credentials from credentials resolver
+  std::string spClientAddress;
+  std::string accessToken;
+  std::string clientToken;
 
-//   for (const auto& byte : fileId) {
-//     ss << std::setw(2)
-//        << static_cast<unsigned>(byte);  // Convert byte to int for stream output
-//   }
+  // Fetches all required credentials from the credentials resolver
+  bell::Result<> updateCredentials();
+};
 
-//   // Construct the endpoint URL depending on prefetch flag
-//   std::string endpoint =
-//       prefetch
-//           ? fmt::format(
-//                 "https://{}/storage-resolve/files/audio/interactive_prefetch/"
-//                 "{}?alt=json&product=9",
-//                 spClientAddress, ss.str())
-//           : fmt::format(
-//                 "https://{}/storage-resolve/files/audio/interactive/"
-//                 "{}?alt=json&product=9",
-//                 spClientAddress, ss.str());
+bell::Result<> DefaultSpClient::putConnectState(
+    cspot_proto::PutStateRequest& stateRequest, const std::string& deviceId) {
+  auto credentialsRes = updateCredentials();
+  if (!credentialsRes) {
+    // Could not fetch credentials
+    return credentialsRes;
+  }
 
-//   auto response = httpClient->get(
-//       endpoint, {
-//                     {"Client-Token", clientToken},
-//                     {"Authorization", fmt::format("Bearer {}", accessToken)},
-//                 });
+  std::vector<std::byte> freshBuffer;
+  auto encodeRes = nanopb_helper::encodeToVector(stateRequest, freshBuffer);
 
-//   if (!response) {
-//     BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
-//              response.error());
-//     return tl::make_unexpected(response.error());
-//   }
+  if (!encodeRes) {
+    BELL_LOG(error, LOG_TAG, "Error while encoding message");
+    return bell::make_unexpected_errc(std::errc::bad_message);
+  }
 
-//   auto responseBody = *response->text();
+  uint32_t salt = std::rand();
+  auto httpResponse = httpClient->put(
+      fmt::format("https://{}/connect-state/v1/devices/{}?product=0&salt={}",
+                  spClientAddress, deviceId, salt),
+      {
+          {
+              "Content-Type",
+              "application/x-protobuf",
+          },
+          // {"X-Spotify-Connection-Id", sessionContext->sessionInfo->sessionId},
+          {"Authorization", fmt::format("Bearer {}", accessToken)},
+      },
+      tcb::span(reinterpret_cast<std::byte*>(freshBuffer.data()),
+                freshBuffer.size()));
 
-//   BELL_LOG(info, LOG_TAG, "Response body: {}", responseBody);
-//   tao::json::value obj = tao::json::from_string(responseBody);
+  if (!httpResponse) {
+    BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
+             httpResponse.error());
+    return tl::make_unexpected(httpResponse.error());
+  }
 
-//   if (obj.at("cdnurl").is_array()) {
-//     return obj.at("cdnurl").get_array().at(0).get_string();
-//   }
+  if (httpResponse->statusCode != 200) {
+    BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
+             httpResponse->statusCode);
+    return bell::make_unexpected_errc(std::errc::bad_message);
+  }
 
-//   return bell::make_unexpected_errc<std::string>(std::errc::bad_message);
-// }
+  return {};
+}
 
-// bell::Result<bell::HTTPResponse> SpClient::contextResolve(
-//     const std::string& contextUri) {
-//   auto credentialsRes = updateCredentials();
-//   if (!credentialsRes) {
-//     // Could not fetch credentials
-//     return tl::make_unexpected(credentialsRes.error());
-//   }
-//   return httpClient->get(
-//       fmt::format("https://{}/context-resolve/v1/{}", spClientAddress,
-//                   contextUri),
-//       {
-//           {"Client-Token", clientToken},
-//           {"Authorization", fmt::format("Bearer {}", accessToken)},
-//       });
-// }
+bell::Result<> DefaultSpClient::updateCredentials() {
+  auto spClientAddressRes = credentialsResolver->getApAddress(
+      CredentialsResolver::AddressType::SpClient);
+  if (!spClientAddressRes) {
+    return tl::make_unexpected(spClientAddressRes.error());
+  }
 
-// bell::Result<bell::HTTPResponse> SpClient::contextAutoplayResolve(
-//     cspot_proto::AutoplayContextRequest& request) {
-//   auto credentialsRes = updateCredentials();
-//   if (!credentialsRes) {
-//     // Could not fetch credentials
-//     return tl::make_unexpected(credentialsRes.error());
-//   }
+  spClientAddress = *spClientAddressRes;
 
-//   std::vector<std::byte> encodedBytes{};
-//   bool encodeResult = nanopb_helper::encodeToVector(request, encodedBytes);
-//   if (!encodeResult) {
-//     BELL_LOG(error, LOG_TAG, "Error while encoding AutoplayContextRequest");
-//     return bell::make_unexpected_errc<bell::HTTPResponse>(
-//         std::errc::bad_message);
-//   }
+  auto accessTokenRes = credentialsResolver->getAccessKey();
+  if (!accessTokenRes) {
+    return tl::make_unexpected(accessTokenRes.error());
+  }
 
-//   return httpClient->post(
-//       fmt::format("https://{}/context-resolve/v1/autoplay", spClientAddress),
-//       {
-//           {"Client-Token", clientToken},
-//           {"Authorization", fmt::format("Bearer {}", accessToken)},
-//       },
-//       tcb::span(reinterpret_cast<std::byte*>(encodedBytes.data()),
-//                 encodedBytes.size()));
-// }
+  accessToken = *accessTokenRes;
 
-// bell::Result<cspot_proto::Track> SpClient::trackMetadata(
-//     const SpotifyId& trackId) {
-//   if (trackId.type != SpotifyIdType::Track) {
-//     BELL_LOG(error, LOG_TAG, "Invalid track ID type: expected Track, got {}",
-//              static_cast<int>(trackId.type));
-//     return bell::make_unexpected_errc<cspot_proto::Track>(
-//         std::errc::invalid_argument);
-//   }
+  auto clientTokenRes = credentialsResolver->getClientToken();
+  if (!clientTokenRes) {
+    return tl::make_unexpected(clientTokenRes.error());
+  }
 
-//   auto response = httpClient->get(
-//       fmt::format("https://{}/metadata/4/track/{}", spClientAddress,
-//                   trackId.hexGid()),
-//       {
-//           {"Client-Token", clientToken},
-//           {"Authorization", fmt::format("Bearer {}", accessToken)},
-//       });
+  clientToken = *clientTokenRes;
 
-//   if (!response) {
-//     return tl::make_unexpected(response.error());
-//   }
+  return {};
+}
 
-//   if (response->statusCode != 200) {
-//     BELL_LOG(error, LOG_TAG, "Error while fetching track metadata: {}",
-//              response->statusCode);
-//     return bell::make_unexpected_errc<cspot_proto::Track>(
-//         std::errc::bad_message);
-//   }
+bell::Result<bell::HTTPResponse> DefaultSpClient::contextResolve(
+    const std::string& contextUri) {
+  return rawRequest(fmt::format("context-resolve/v1/{}", contextUri));
+}
 
-//   auto resultBytes = response->bytes();
+bell::Result<bell::HTTPResponse> DefaultSpClient::contextAutoplayResolve(
+    cspot_proto::AutoplayContextRequest& request) {
+  auto credentialsRes = updateCredentials();
+  if (!credentialsRes) {
+    // Could not fetch credentials
+    return tl::make_unexpected(credentialsRes.error());
+  }
 
-//   cspot_proto::Track trackProto;
+  std::vector<std::byte> encodedBytes{};
+  bool encodeResult = nanopb_helper::encodeToVector(request, encodedBytes);
+  if (!encodeResult) {
+    BELL_LOG(error, LOG_TAG, "Error while encoding AutoplayContextRequest");
+    return bell::make_unexpected_errc<bell::HTTPResponse>(
+        std::errc::bad_message);
+  }
 
-//   bool decodeRes = nanopb_helper::decodeFromVector(trackProto, *resultBytes);
+  return httpClient->post(
+      fmt::format("https://{}/context-resolve/v1/autoplay", spClientAddress),
+      {
+          {"Client-Token", clientToken},
+          {"Authorization", fmt::format("Bearer {}", accessToken)},
+      },
+      tcb::span(reinterpret_cast<std::byte*>(encodedBytes.data()),
+                encodedBytes.size()));
+}
 
-//   if (!decodeRes) {
-//     BELL_LOG(error, LOG_TAG, "Error while decoding track metadata");
-//     return bell::make_unexpected_errc<cspot_proto::Track>(
-//         std::errc::bad_message);
-//   }
+bell::Result<bell::HTTPResponse> DefaultSpClient::rawRequest(
+    const std::string& requestUri) {
+  auto credentialsRes = updateCredentials();
+  if (!credentialsRes) {
+    // Could not fetch credentials
+    return tl::make_unexpected(credentialsRes.error());
+  }
+  return httpClient->get(
+      fmt::format("https://{}/{}", spClientAddress, requestUri),
+      {
+          {"Client-Token", clientToken},
+          {"Authorization", fmt::format("Bearer {}", accessToken)},
+      });
+}
 
-//   return trackProto;
-// }
+bell::Result<cspot_proto::Track> DefaultSpClient::trackMetadata(
+    const SpotifyId& trackId) {
+  if (trackId.type != SpotifyIdType::Track) {
+    BELL_LOG(error, LOG_TAG, "Invalid track ID type: expected Track, got {}",
+             static_cast<int>(trackId.type));
+    return bell::make_unexpected_errc<cspot_proto::Track>(
+        std::errc::invalid_argument);
+  }
 
-// bell::Result<> SpClient::updateCredentials() {
-//   auto spClientAddressRes = sessionContext->credentialsResolver->getApAddress(
-//       CredentialsResolver::AddressType::SpClient);
-//   if (!spClientAddressRes) {
-//     return tl::make_unexpected(spClientAddressRes.error());
-//   }
+  auto response = httpClient->get(
+      fmt::format("https://{}/metadata/4/track/{}", spClientAddress,
+                  trackId.hexGid()),
+      {
+          {"Client-Token", clientToken},
+          {"Authorization", fmt::format("Bearer {}", accessToken)},
+      });
 
-//   spClientAddress = *spClientAddressRes;
+  if (!response) {
+    return tl::make_unexpected(response.error());
+  }
 
-//   auto accessTokenRes = sessionContext->credentialsResolver->getAccessKey();
-//   if (!accessTokenRes) {
-//     return tl::make_unexpected(accessTokenRes.error());
-//   }
+  if (response->statusCode != 200) {
+    BELL_LOG(error, LOG_TAG, "Error while fetching track metadata: {}",
+             response->statusCode);
+    return bell::make_unexpected_errc<cspot_proto::Track>(
+        std::errc::bad_message);
+  }
 
-//   accessToken = *accessTokenRes;
+  auto resultBytes = response->bytes();
 
-//   auto clientTokenRes = sessionContext->credentialsResolver->getClientToken();
-//   if (!clientTokenRes) {
-//     return tl::make_unexpected(clientTokenRes.error());
-//   }
+  cspot_proto::Track trackProto;
 
-//   clientToken = *clientTokenRes;
+  bool decodeRes = nanopb_helper::decodeFromVector(trackProto, *resultBytes);
 
-//   return {};
-// }
+  if (!decodeRes) {
+    BELL_LOG(error, LOG_TAG, "Error while decoding track metadata");
+    return bell::make_unexpected_errc<cspot_proto::Track>(
+        std::errc::bad_message);
+  }
+
+  return trackProto;
+}
+
+bell::Result<cspot_proto::Episode> DefaultSpClient::episodeMetadata(
+    const SpotifyId& episodeId) {
+  if (episodeId.type != SpotifyIdType::Episode) {
+    BELL_LOG(error, LOG_TAG, "Invalid track ID type: expected Episode, got {}",
+             static_cast<int>(episodeId.type));
+    return bell::make_unexpected_errc<cspot_proto::Episode>(
+        std::errc::invalid_argument);
+  }
+
+  auto response = httpClient->get(
+      fmt::format("https://{}/metadata/4/episode/{}", spClientAddress,
+                  episodeId.hexGid()),
+      {
+          {"Client-Token", clientToken},
+          {"Authorization", fmt::format("Bearer {}", accessToken)},
+      });
+
+  if (!response) {
+    return tl::make_unexpected(response.error());
+  }
+
+  if (response->statusCode != 200) {
+    BELL_LOG(error, LOG_TAG, "Error while fetching episode metadata: {}",
+             response->statusCode);
+    return bell::make_unexpected_errc<cspot_proto::Episode>(
+        std::errc::bad_message);
+  }
+
+  auto resultBytes = response->bytes();
+
+  cspot_proto::Episode episodeProto;
+
+  bool decodeRes = nanopb_helper::decodeFromVector(episodeProto, *resultBytes);
+
+  if (!decodeRes) {
+    BELL_LOG(error, LOG_TAG, "Error while decoding episode metadata");
+    return bell::make_unexpected_errc<cspot_proto::Episode>(
+        std::errc::bad_message);
+  }
+
+  return episodeProto;
+}
+
+bell::Result<std::string> DefaultSpClient::resolveStorageInteractive(
+    const std::vector<std::byte>& fileId, bool prefetch) {
+  auto credentialsRes = updateCredentials();
+  if (!credentialsRes) {
+    // Could not fetch credentials
+    return tl::make_unexpected(credentialsRes.error());
+  }
+
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0');  // Set hex output and pad with '0'
+
+  for (const auto& byte : fileId) {
+    ss << std::setw(2)
+       << static_cast<unsigned>(byte);  // Convert byte to int for stream output
+  }
+
+  // Construct the endpoint URL depending on prefetch flag
+  std::string endpoint =
+      prefetch
+          ? fmt::format(
+                "https://{}/storage-resolve/files/audio/interactive_prefetch/"
+                "{}?alt=json&product=9",
+                spClientAddress, ss.str())
+          : fmt::format(
+                "https://{}/storage-resolve/files/audio/interactive/"
+                "{}?alt=json&product=9",
+                spClientAddress, ss.str());
+
+  auto response = httpClient->get(
+      endpoint, {
+                    {"Client-Token", clientToken},
+                    {"Authorization", fmt::format("Bearer {}", accessToken)},
+                });
+
+  if (!response) {
+    BELL_LOG(error, LOG_TAG, "Error while sending request: {}",
+             response.error());
+    return tl::make_unexpected(response.error());
+  }
+
+  auto responseBody = *response->text();
+
+  BELL_LOG(info, LOG_TAG, "Response body: {}", responseBody);
+  tao::json::value obj = tao::json::from_string(responseBody);
+
+  if (obj.at("cdnurl").is_array()) {
+    return obj.at("cdnurl").get_array().at(0).get_string();
+  }
+
+  return bell::make_unexpected_errc<std::string>(std::errc::bad_message);
+}
+}  // namespace
+
+std::unique_ptr<SpClient> cspot::createDefaultSpClient(
+    std::shared_ptr<bell::HTTPClient> httpClient,
+    std::shared_ptr<CredentialsResolver> credentialsResolver) {
+  return std::make_unique<DefaultSpClient>(std::move(httpClient),
+                                           std::move(credentialsResolver));
+}

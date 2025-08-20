@@ -8,47 +8,47 @@
 #include "bell/Result.h"
 #include "bell/http/Client.h"
 
-#include "SessionContext.h"
-
 // Protobufs
 #include "proto/ConnectPb.h"
 #include "proto/MetadataPb.h"
 #include "proto/SpotifyId.h"
 
+// Own includes
+#include "api/CredentialsResolver.h"
+
 namespace cspot {
+
 class SpClient {
  public:
-  SpClient(std::shared_ptr<bell::HTTPClient> httpClient,
-           std::shared_ptr<SessionContext> sessionContext);
+  virtual ~SpClient() = default;
 
-  bell::Result<> putConnectState(cspot_proto::PutStateRequest& stateRequest);
-  bell::Result<bell::HTTPResponse> contextResolve(
-      const std::string& contextUri);
+  /**
+   * @brief Makes an /connect-state/ PUT request, used to publish spotify device state
+   */
+  virtual bell::Result<> putConnectState(
+      cspot_proto::PutStateRequest& stateRequest,
+      const std::string& deviceId) = 0;
 
-  bell::Result<bell::HTTPResponse> contextAutoplayResolve(
-      cspot_proto::AutoplayContextRequest& request);
+  virtual bell::Result<bell::HTTPResponse> contextResolve(
+      const std::string& contextUri) = 0;
 
-  bell::Result<cspot_proto::Track> trackMetadata(const SpotifyId& trackId);
+  virtual bell::Result<bell::HTTPResponse> contextAutoplayResolve(
+      cspot_proto::AutoplayContextRequest& request) = 0;
 
-  bell::Result<cspot_proto::Episode> episodeMetadata(
-      const SpotifyId& episodeId);
+  virtual bell::Result<bell::HTTPResponse> rawRequest(
+      const std::string& uri) = 0;
 
-  bell::Result<std::string> resolveStorageInteractive(
-      const std::vector<std::byte>& fileId, bool prefetch = false);
+  virtual bell::Result<cspot_proto::Track> trackMetadata(
+      const SpotifyId& trackId) = 0;
 
- private:
-  const char* LOG_TAG = "SpClient";
+  virtual bell::Result<cspot_proto::Episode> episodeMetadata(
+      const SpotifyId& episodeId) = 0;
 
-  std::shared_ptr<bell::HTTPClient> httpClient;
-  std::shared_ptr<SessionContext> sessionContext;
-  std::vector<std::byte> requestBuffer;
-
-  // Credentials fetched from CredentialResolver
-  std::string accessToken;
-  std::string clientToken;
-  std::string spClientAddress;
-
-  // Updates credentials if expired
-  bell::Result<> updateCredentials();
+  virtual bell::Result<std::string> resolveStorageInteractive(
+      const std::vector<std::byte>& fileId, bool prefetch = false) = 0;
 };
+
+std::unique_ptr<SpClient> createDefaultSpClient(
+    std::shared_ptr<bell::HTTPClient> httpClient,
+    std::shared_ptr<CredentialsResolver> credentialsResolver);
 }  // namespace cspot

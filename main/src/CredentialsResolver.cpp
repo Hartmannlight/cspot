@@ -10,6 +10,7 @@
 
 // Protobufs
 #include "bell/Result.h"
+#include "clienttoken.pb.h"
 #include "proto/ClientTokenPb.h"
 #include "proto/Login5Pb.h"
 #include "proto/NanoPBHelper.h"
@@ -203,8 +204,17 @@ class DefaultCredentialsResolver : public CredentialsResolver {
       if (!nanopb_helper::decodeFromBuffer(
               tokenResponse, *clientTokenResponse->bytesPtr(),
               *clientTokenResponse->bytesLength())) {
+        BELL_LOG(error, LOG_TAG, "Could not decode");
         return bell::make_unexpected_errc<std::pair<std::string, int32_t>>(
-            std::errc::bad_address);
+            std::errc::bad_message);
+      }
+
+      if (tokenResponse.responseType !=
+          ClientTokenResponseType_RESPONSE_GRANTED_TOKEN_RESPONSE) {
+        BELL_LOG(error, LOG_TAG, "Invalid client token response, type = {}",
+                 static_cast<int>(tokenResponse.responseType));
+        return bell::make_unexpected_errc<std::pair<std::string, int32_t>>(
+            std::errc::resource_unavailable_try_again);
       }
 
       BELL_LOG(debug, LOG_TAG, "Client token received, expires in {}",

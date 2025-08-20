@@ -177,7 +177,7 @@ bell::Result<> ConnectStateHandler::putState(PutStateReason reason) {
   putStateRequestProto.memberType = MemberType_CONNECT_STATE;
   putStateRequestProto.putStateReason = reason;
 
-  return this->spClient->putConnectState(putStateRequestProto);
+  return this->spClient->putConnectState(putStateRequestProto, "");
   return {};
 }
 

@@ -1,8 +1,12 @@
 #include <doctest/doctest.h>
+#include <chrono>
 #include <trompeloeil.hpp>
 
+#include "Utils.h"
 #include "api/CredentialsResolver.h"
 #include "mocks/MockHTTPTransport.h"
+#include "proto/ClientTokenPb.h"
+#include "proto/NanoPBHelper.h"
 #include "tao/json.hpp"
 
 TEST_CASE("CredentialsResolver tests") {
@@ -33,11 +37,10 @@ TEST_CASE("CredentialsResolver tests") {
 
     SUBCASE("should fetch and cache addresses on the first call") {
       REQUIRE_CALL(*rawMockTransport, execute(_))
-          .WITH([](const bell::http::Request& req) {
-            return req.method == bell::HTTPMethod::GET &&
-                   req.uri.host == "apresolve.spotify.com";
-          })
-          .RETURN(createMockResponse(200, responseBody, "application/json"));
+          .WITH(_1.method == bell::HTTPMethod::GET)
+          .WITH(_1.uri.host == "apresolve.spotify.com")
+          .RETURN(
+              createMockResponseString(200, responseBody, "application/json"));
 
       // Call for the first type, this should trigger the fetch
       auto apRes = resolver->getApAddress(
@@ -50,6 +53,69 @@ TEST_CASE("CredentialsResolver tests") {
           cspot::CredentialsResolver::AddressType::Dealer);
       CHECK(dealerRes.has_value());
       CHECK(*dealerRes == dealer1);
+
+      REQUIRE_CALL(*rawMockTransport, execute(_))
+          .WITH(_1.method == bell::HTTPMethod::GET)
+          .WITH(_1.uri.host == "apresolve.spotify.com")
+          .RETURN(
+              createMockResponseString(200, responseBody, "application/json"));
+
+      // A request after a certain time should expire the address and fetch a new one
+      dealerRes = resolver->getApAddress(
+          cspot::CredentialsResolver::AddressType::Dealer,
+          std::chrono::system_clock::now() + std::chrono::hours(2));
+      CHECK(dealerRes.has_value());
+      CHECK(*dealerRes == dealer1);
+    }
+  }
+
+  SUBCASE("getClientToken") {
+    const std::string mockedToken = "123456789";
+
+    // Mock a response from server
+    cspot_proto::ClientTokenResponse tokenResponse;
+    tokenResponse.responseType =
+        ClientTokenResponseType_RESPONSE_GRANTED_TOKEN_RESPONSE;
+    tokenResponse.grantedToken.token = mockedToken;
+    tokenResponse.grantedToken.expiresAfterSeconds = 360;
+    tokenResponse.grantedToken.refreshAfterSeconds = 360;
+
+    // Prepare response bytes
+    std::vector<std::byte> responseBytes;
+    CHECK(nanopb_helper::encodeToVector(tokenResponse, responseBytes));
+
+    auto responseSpan = tcb::span<std::byte>(
+        {reinterpret_cast<std::byte*>(responseBytes.data()),
+         responseBytes.size()});
+
+    SUBCASE("should fetch and cache the token on the first call") {
+      REQUIRE_CALL(*rawMockTransport, execute(_))
+          .WITH(_1.method == bell::HTTPMethod::POST)
+          .WITH(_1.uri.host == "clienttoken.spotify.com")
+          .RETURN(createMockResponseBytes(200, responseSpan,
+                                          "application/x-protobuf"));
+
+      // Call for the first time, this should trigger the fetch
+      auto tokenRes = resolver->getClientToken();
+      CHECK(tokenRes.has_value());
+      CHECK(*tokenRes == mockedToken);
+
+      // Second call, should use cached token
+      tokenRes = resolver->getClientToken();
+      CHECK(tokenRes.has_value());
+      CHECK(*tokenRes == mockedToken);
+
+      REQUIRE_CALL(*rawMockTransport, execute(_))
+          .WITH(_1.method == bell::HTTPMethod::POST)
+          .WITH(_1.uri.host == "clienttoken.spotify.com")
+          .RETURN(createMockResponseBytes(200, responseSpan,
+                                          "application/x-protobuf"));
+
+      // Request made after a certain time should expire the request and make a new one
+      tokenRes = resolver->getClientToken(std::chrono::system_clock::now() +
+                                          std::chrono::seconds(360 * 2));
+      CHECK(tokenRes.has_value());
+      CHECK(*tokenRes == mockedToken);
     }
   }
 }

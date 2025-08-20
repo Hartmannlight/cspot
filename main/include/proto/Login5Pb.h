@@ -89,8 +89,7 @@ struct LoginResponse {
     _LoginResponse rawProto = LoginResponse_init_zero;
 
     nanopb_helper::bindField(rawProto.ok, self->loginOk, isDecode);
-    // TODO: FIXUP!
-    // nanopb_helper::bindField(rawProto.error, self->loginError, isDecode);
+    nanopb_helper::bindField(rawProto.error, self->loginError, isDecode);
 
     return rawProto;
   }
