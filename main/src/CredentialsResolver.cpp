@@ -134,7 +134,7 @@ class DefaultCredentialsResolver : public CredentialsResolver {
   std::shared_ptr<bell::HTTPClient> httpClient;
   std::shared_ptr<AuthInfo> authInfo;
 
-  std::mutex accessMutex;
+  std::recursive_mutex accessMutex;
 
   // Expiry dates
   sysclock_timepoint addressesExpiresAt;
