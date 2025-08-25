@@ -1,6 +1,7 @@
 #include "proto/SpotifyId.h"
 
 #include <crypto/Base62.h>
+#include <cassert>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -42,16 +43,22 @@ SpotifyIdType uriToType(std::string_view prefix) {
 
 cspot::SpotifyId::SpotifyId(SpotifyIdType type,
                             const std::vector<std::byte>& gid)
+    : SpotifyId(type, gid.data(), gid.size()) {}
+
+cspot::SpotifyId::SpotifyId(SpotifyIdType type,
+                            const std::array<std::byte, 16>& gid)
+    : SpotifyId(type, gid.data(), gid.size()) {}
+
+cspot::SpotifyId::SpotifyId(SpotifyIdType type, const std::byte* gid,
+                            size_t size)
     : type(type) {
-  if (gid.size() != 16) {
-    throw std::invalid_argument("GID must be exactly 16 bytes long");
-  }
-  std::copy(gid.begin(), gid.end(), this->gid.begin());
+  assert(size == 16);
+  std::copy(gid, gid + size, this->gid.begin());
 
   this->type = type;
 
   // Convert GID to Base62
-  this->base62Gid = base62Encode(gid.data(), gid.size());
+  this->base62Gid = base62Encode(gid, size);
   // Pad Base62 GID to 22 characters
   this->base62Gid =
       std::string(22 - this->base62Gid.size(), '0') + this->base62Gid;
@@ -80,9 +87,13 @@ cspot::SpotifyId::SpotifyId(const std::string& uri)
 
   // Decode Base62 GID to bytes
   size_t gidSize = 16;
-  if (!base62Decode(this->base62Gid, this->gid.data(), gidSize) ||
-      gidSize != 16) {
+  if (!base62Decode(this->base62Gid, this->gid.data(), gidSize)) {
     throw std::invalid_argument("Invalid Base62 GID in URI");
+  }
+
+  if (gidSize < 16) {
+    // Move gid right to fill leading zeros
+    std::memmove(this->gid.data() + (16 - gidSize), this->gid.data(), gidSize);
   }
 }
 

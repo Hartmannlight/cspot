@@ -11,6 +11,7 @@ struct SpotifyId {
   // GID constructor
   SpotifyId(SpotifyIdType type, const std::vector<std::byte>& gid);
   SpotifyId(SpotifyIdType type, const std::array<std::byte, 16>& gid);
+  SpotifyId(SpotifyIdType type, const std::byte* gid, size_t size);
 
   // Base62 GID constructor
   SpotifyId(SpotifyIdType type, const std::string& base62Gid);

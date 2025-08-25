@@ -3,6 +3,7 @@
 #include "bell/http/Client.h"
 #include "crypto/Base62.h"
 #include "events/EventLoop.h"
+#include "fmt/color.h"
 #include "proto/ConnectPb.h"
 #include "proto/SpotifyId.h"
 #include "tl/expected.hpp"
@@ -11,6 +12,32 @@
 using namespace cspot;
 
 namespace {
+// Fetch new page when less than this many tracks remain
+const uint32_t trackFetchThreshold = 8;
+const uint32_t trackWindowLen = 6;
+
+// Converts a spotify URI to a 16byte GID, returns empty array on failure
+std::optional<std::array<std::byte, 16>> uriToGid(const std::string& uri) {
+  std::array<std::byte, 16> trackGid{};
+  size_t outLen = 16;
+  auto uriDelimiter = uri.find_last_of(':');
+  if (uriDelimiter == std::string::npos) {
+    return std::nullopt;
+  }
+
+  if (!cspot::base62Decode(uri.substr(uriDelimiter + 1), trackGid.data(),
+                           outLen)) {
+
+    return std::nullopt;
+  }
+  if (outLen < 16) {
+    // Move gid right to fill leading zeros
+    std::memmove(trackGid.data() + (16 - outLen), trackGid.data(), outLen);
+  }
+
+  return trackGid;
+}
+
 class DefaultTrackQueueHandler : public TrackQueueHandler {
  public:
   DefaultTrackQueueHandler(std::shared_ptr<SpClient> spClient,
@@ -25,6 +52,18 @@ class DefaultTrackQueueHandler : public TrackQueueHandler {
   void setPlayingQueue(bool isPlayingQueue) override;
 
   std::optional<cspot_proto::ProvidedTrack> currentTrack() override;
+
+  std::optional<cspot_proto::ContextIndex> currentContextIndex() override;
+
+  bell::Result<> skipToNextTrack(const std::string& trackUri) override;
+  bell::Result<> skipToPreviousTrack(const std::string& trackUri) override;
+
+  bell::Result<> enableShuffle(bool enable) override;
+
+  tcb::span<cspot_proto::ProvidedTrack> nextTracks() override;
+  tcb::span<cspot_proto::ProvidedTrack> previousTracks() override;
+
+  void updateTrackWindows() override;
 
  private:
   const char* LOG_TAG = "TrackQueueHandler";
@@ -55,6 +94,10 @@ class DefaultTrackQueueHandler : public TrackQueueHandler {
 
   std::pair<std::string, std::string> targetTrackIds{};
 
+  // Current window of tracks, used for providing next/previous tracks to UI and track player
+  std::array<cspot_proto::ProvidedTrack, trackWindowLen> nextTracksWindow{};
+  std::array<cspot_proto::ProvidedTrack, trackWindowLen> previousTracksWindow{};
+
   void resetContext();
 
   void onTrackParsed(uint32_t pageIndex, uint32_t trackIndex,
@@ -63,6 +106,9 @@ class DefaultTrackQueueHandler : public TrackQueueHandler {
   void onPageMetadataParsed(uint32_t pageIndex,
                             const PageMetadata& pageMetadata);
 
+  std::optional<cspot_proto::ContextIndex> getOffsetIndex(int32_t offset) const;
+
+  bell::Result<> ensureEnoughTracks();
   bell::Result<> fetchRootPage(const std::string& rootContextUri);
   bell::Result<> fetchContextPage(FetchedContextPage& page);
   bell::Result<> feedResponseToParser(bell::HTTPResponse& response);
@@ -144,19 +190,14 @@ void DefaultTrackQueueHandler::onTrackParsed(
     contextIndex = {pageIndex, trackIndex};
   }
 
-  GidBytes trackGid{};
-  size_t outLen = 16;
-  auto uriDelimiter = track.uri.find_last_of(':');
-  if (uriDelimiter == std::string::npos) {
-    BELL_LOG(error, LOG_TAG, "Could not parse track uri={}", track.uri);
+  auto trackGid = uriToGid(track.uri);
+
+  if (!trackGid) {
+    BELL_LOG(error, LOG_TAG, "Could not parse uri={}", track.uri);
     return;
   }
 
-  cspot::base62Decode(track.uri.substr(uriDelimiter + 1), trackGid.data(),
-                      outLen);
-  assert(outLen == trackGid.size());
-
-  contextPages[pageIndex].trackGids.push_back(trackGid);
+  contextPages[pageIndex].trackGids.push_back(*trackGid);
 }
 
 void DefaultTrackQueueHandler::onPageMetadataParsed(
@@ -174,6 +215,41 @@ void DefaultTrackQueueHandler::onPageMetadataParsed(
         .url = pageMetadata.nextPageUrl,
     });
   }
+}
+
+bell::Result<> DefaultTrackQueueHandler::ensureEnoughTracks() {
+  if (!contextIndex) {
+    return {};  // Cant ensure tracks without context index
+  }
+
+  assert(contextPages.size() > contextIndex->page);
+  assert(contextPages[contextIndex->page].trackGids.size() >
+         contextIndex->track);
+  size_t nextTracksCount = contextPages[contextIndex->page].trackGids.size() -
+                           (contextIndex->track + 1);
+
+  size_t nextPageIndex = contextIndex->page + 1;
+
+  // Iterate over next pages until we have enough tracks or run out of pages
+  while (contextPages.size() > (nextPageIndex) &&
+         (nextTracksCount < trackFetchThreshold)) {
+    if (!contextPages[nextPageIndex].trackGids.empty()) {
+      nextTracksCount += contextPages[nextPageIndex].trackGids.size();
+      nextPageIndex++;
+      continue;
+    }
+
+    auto res = fetchContextPage(contextPages[nextPageIndex]);
+    if (!res) {
+      BELL_LOG(error, LOG_TAG, "Could not resolve context page, uri={}, err={}",
+               *contextPages[nextPageIndex].url, res.error());
+      return tl::make_unexpected(res.error());
+    }
+    nextTracksCount += contextPages[nextPageIndex].trackGids.size();
+    nextPageIndex++;
+  }
+
+  return {};
 }
 
 bell::Result<> DefaultTrackQueueHandler::fetchRootPage(
@@ -266,16 +342,23 @@ void DefaultTrackQueueHandler::resetContext() {
   contextPages = {};
   contextIndex.reset();
   targetTrackIds = {};
+  nextTracksWindow.fill(cspot_proto::ProvidedTrack{});
+  previousTracksWindow.fill(cspot_proto::ProvidedTrack{});
 }
 
 std::optional<cspot_proto::ProvidedTrack>
 DefaultTrackQueueHandler::currentTrack() {
-  if (isPlayingQueue) {
-    size_t indexInQueue = 0;  // TODO: impl
-    auto& track = queue[indexInQueue];
+  auto res = ensureEnoughTracks();
+  if (!res) {
+    BELL_LOG(error, LOG_TAG, "Could not ensure enough tracks, err={}",
+             res.error());
+  }
+
+  if (isPlayingQueue && !queue.empty()) {
+    auto& track = queue[0];
     return cspot_proto::ProvidedTrack{
         .uri = track.uri,
-        .uid = fmt::format("q{}", indexInQueue),
+        .uid = "q0",
         .provider = "queue",
     };
   }
@@ -303,14 +386,267 @@ DefaultTrackQueueHandler::currentTrack() {
   return std::nullopt;
 }
 
+void DefaultTrackQueueHandler::setQueue(
+    const std::vector<cspot_proto::ContextTrack>& queue) {
+  this->queue = queue;
+  isPlayingQueue = false;
+}
+
 void DefaultTrackQueueHandler::setPlayingQueue(bool isPlayingQueue) {
   this->isPlayingQueue = isPlayingQueue;
 }
 
-void DefaultTrackQueueHandler::setQueue(
-    const std::vector<cspot_proto::ContextTrack>& queue) {
-  this->queue = queue;
+std::optional<cspot_proto::ContextIndex>
+DefaultTrackQueueHandler::currentContextIndex() {
+  if (isPlayingQueue) {
+    return std::nullopt;  // No context index when playing from queue
+  }
+
+  return contextIndex;
 }
+
+bell::Result<> DefaultTrackQueueHandler::skipToNextTrack(
+    const std::string& trackUri) {
+  (void)trackUri;  //TODO: Implement skipping to specific track in context
+
+  if (!isPlayingQueue && !queue.empty()) {
+    setPlayingQueue(true);
+    return {};
+  }
+
+  if (isPlayingQueue && !queue.empty()) {
+    queue.erase(queue.begin());
+
+    if (queue.empty()) {
+      BELL_LOG(debug, LOG_TAG,
+               "Finished playing queue, switching to context tracks");
+      isPlayingQueue = false;  // No more tracks in queue, switch to context
+    }
+  } else if (contextIndex) {
+    auto res = ensureEnoughTracks();
+    if (!res) {
+      BELL_LOG(error, LOG_TAG, "Could not ensure tracks, err={}", res.error());
+    }
+
+    auto nextIndex = getOffsetIndex(1);
+    if (nextIndex.has_value()) {
+      contextIndex = *nextIndex;
+    } else {
+      BELL_LOG(debug, LOG_TAG, "At end of context, cannot skip to next track");
+    }
+  }
+
+  return {};
+}
+
+bell::Result<> DefaultTrackQueueHandler::skipToPreviousTrack(
+    const std::string& trackUri) {
+  (void)trackUri;  //TODO: Implement skipping to specific track in context
+  if (!contextIndex) {
+    return {};  // No context index, cannot skip to previous track
+  }
+
+  if (isPlayingQueue) {
+    isPlayingQueue = false;  // Switch back to context
+    return {};
+  }
+
+  if ((contextIndex->page == 0) && (contextIndex->track == 0)) {
+    BELL_LOG(debug, LOG_TAG,
+             "At start of context, cannot skip to previous track");
+    return {};
+  }
+
+  auto prevIndex = getOffsetIndex(-1);
+  if (prevIndex.has_value()) {
+    contextIndex = *prevIndex;
+  } else {
+    BELL_LOG(debug, LOG_TAG,
+             "At beggining of context, cannot skip to prev track");
+  }
+
+  return {};
+}
+
+bell::Result<> DefaultTrackQueueHandler::enableShuffle(bool shuffle) {
+  return {};  // TODO: Implement shuffle
+}
+
+std::optional<cspot_proto::ContextIndex>
+DefaultTrackQueueHandler::getOffsetIndex(int32_t offset) const {
+  if (!contextIndex) {
+    return std::nullopt;
+  }
+
+  int32_t totalOffset = static_cast<int32_t>(contextIndex->track) + offset;
+  if (totalOffset < 0) {
+    if (contextIndex->page == 0) {
+      return std::nullopt;  // No previous track available
+    }
+
+    return cspot_proto::ContextIndex{
+        static_cast<uint32_t>(contextIndex->page - 1),
+        static_cast<uint32_t>(
+            contextPages[contextIndex->page - 1].trackGids.size() +
+            totalOffset),
+    };
+  }
+
+  if (totalOffset >=
+      static_cast<int32_t>(contextPages[contextIndex->page].trackGids.size())) {
+
+    size_t skipByPages = 1;
+    int32_t remainingOffset =
+        totalOffset -
+        static_cast<int32_t>(contextPages[contextIndex->page].trackGids.size());
+
+    while (contextPages.size() > contextIndex->page + skipByPages) {
+      if (remainingOffset <
+          static_cast<int32_t>(contextPages[contextIndex->page + skipByPages]
+                                   .trackGids.size())) {
+        return cspot_proto::ContextIndex{
+            static_cast<uint32_t>(contextIndex->page + skipByPages),
+            static_cast<uint32_t>(remainingOffset),
+        };
+      }
+      remainingOffset -= static_cast<int32_t>(
+          contextPages[contextIndex->page + skipByPages].trackGids.size());
+      skipByPages++;
+    }
+    return std::nullopt;  // No next page available
+  }
+
+  // Fits in current page
+  return cspot_proto::ContextIndex{
+      contextIndex->page,
+      static_cast<uint32_t>(totalOffset),
+  };
+}
+
+void DefaultTrackQueueHandler::updateTrackWindows() {
+  bool updated = false;
+
+  size_t queueOffset = queue.size();
+  size_t offsetInQueue = isPlayingQueue ? 1 : 0;
+  if (queueOffset > 0) {
+    queueOffset -= offsetInQueue;  // Offset by one to not include current track
+  }
+
+  size_t highestValidIndex = 0;
+  for (size_t x = 0; x < nextTracksWindow.size(); x++) {
+    if (x < queueOffset) {
+      highestValidIndex = x;
+      if (nextTracksWindow[x].uri != queue[x + offsetInQueue].uri) {
+        updated = true;
+
+        // Construct ProvidedTrack from queue track
+        nextTracksWindow[x].uri = queue[x + offsetInQueue].uri;
+        nextTracksWindow[x].uid = "q" + std::to_string(x);
+        nextTracksWindow[x].provider = "queue";
+      }
+    } else {
+      int32_t trackOffset = x - queueOffset;
+      auto offsetIndex = getOffsetIndex(trackOffset + 1);
+
+      auto& gid = contextPages[offsetIndex->page].trackGids[offsetIndex->track];
+
+      if (!nextTracksWindow[x].gid && !nextTracksWindow[x].uri.empty()) {
+        nextTracksWindow[x].gid = gid;
+      }
+
+      if (offsetIndex.has_value()) {
+        if (nextTracksWindow[x].gid != gid) {
+          updated = true;
+
+          // Construct ProvidedTrack from next context track
+          SpotifyId trackId(contextIdType, gid);
+          nextTracksWindow[x].uri = trackId.uri;
+          nextTracksWindow[x].uid = "";
+          nextTracksWindow[x].provider = "context";
+        }
+
+        highestValidIndex = x;
+      }
+    }
+  }
+
+  // Clear all tracks over highest valid index
+  for (size_t x = highestValidIndex + 1; x < nextTracksWindow.size(); x++) {
+    if (!nextTracksWindow[x].uri.empty()) {
+      updated = true;
+      nextTracksWindow[x] = {};
+    }
+  }
+
+  if (updated) {
+    // Construct previous tracks
+    for (size_t x = 0; x < previousTracksWindow.size(); x++) {
+      int32_t trackOffset = -(static_cast<int32_t>(x) + 1);
+      if (isPlayingQueue) {
+        trackOffset +=
+            1;  // Include current track in previous when playing queue
+      }
+
+      auto offsetIndex = getOffsetIndex(trackOffset);
+
+      if (offsetIndex.has_value()) {
+        auto& gid =
+            contextPages[offsetIndex->page].trackGids[offsetIndex->track];
+
+        if (!previousTracksWindow[x].gid &&
+            !previousTracksWindow[x].uri.empty()) {
+          previousTracksWindow[x].gid = gid;
+        }
+
+        // Construct ProvidedTrack from previous context track
+        SpotifyId trackId(contextIdType, gid);
+        previousTracksWindow[x].uri = trackId.uri;
+        previousTracksWindow[x].uid = "";
+        previousTracksWindow[x].provider = "context";
+      } else {
+        previousTracksWindow[x] = {};
+      }
+    }
+
+    // TODO: Make an event with updated tracks
+    BELL_LOG(info, LOG_TAG, "Track windows updated");
+
+    TrackQueueUpdate updateEvent{};
+    auto nextTracksItr = nextTracks();
+    for (auto& nextTrack : nextTracksItr) {
+      if (nextTrack.uri.empty()) {
+        break;
+      }
+      updateEvent.nextTracks.emplace_back(nextTrack.uri);
+    }
+
+    std::string& prevTrackUri = previousTracks().back().uri;
+    if (!prevTrackUri.empty()) {
+      updateEvent.previousTrackId = SpotifyId{prevTrackUri};
+    }
+
+    if (isPlayingQueue && !queue.empty()) {
+      updateEvent.currentTrackId = SpotifyId{queue[0].uri};
+    } else if (currentContextIndex()) {
+      auto& trackGid =
+          contextPages[contextIndex->page].trackGids[contextIndex->track];
+
+      updateEvent.currentTrackId = SpotifyId{contextIdType, trackGid};
+    }
+
+    // Post queue updated event
+    eventLoop->post(EventLoop::EventType::QUEUE_UPDATED, updateEvent);
+  }
+}
+
+tcb::span<cspot_proto::ProvidedTrack> DefaultTrackQueueHandler::nextTracks() {
+  return {nextTracksWindow.data(), nextTracksWindow.size()};
+}
+
+tcb::span<cspot_proto::ProvidedTrack>
+DefaultTrackQueueHandler::previousTracks() {
+  return {previousTracksWindow.data(), previousTracksWindow.size()};
+};
 
 std::unique_ptr<TrackQueueHandler> cspot::createDefaultTrackQueueHandler(
     std::shared_ptr<SpClient> spClient, std::shared_ptr<EventLoop> eventLoop) {

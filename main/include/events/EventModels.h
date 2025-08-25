@@ -20,7 +20,8 @@ struct AudioKeyResponse {
 
 struct TrackQueueUpdate {
   std::optional<SpotifyId> previousTrackId;
-  std::vector<SpotifyId> nextTracksInQueue;
+  std::vector<SpotifyId> nextTracks;
+  std::optional<SpotifyId> currentTrackId;
 };
 
 struct ProvidedFile {

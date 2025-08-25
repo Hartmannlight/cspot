@@ -8,10 +8,14 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 
 include(../external/bell/external/doctest/scripts/cmake/doctest.cmake)
 
+# Read the directory for the test data
+set(TEST_DATA_PATH "${CMAKE_CURRENT_SOURCE_DIR}/data")
+
 add_executable(cspot-test
   main.cpp CredentialsResolverTest.cpp SpClientTest.cpp TrackQueueHandlerTest.cpp
 )
 target_compile_options(cspot-test PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter)
+target_compile_definitions(cspot-test PRIVATE TEST_DATA_PATH="${TEST_DATA_PATH}")
 target_link_libraries(cspot-test cspot doctest::doctest trompeloeil::trompeloeil)
 
 doctest_discover_tests(cspot-test)

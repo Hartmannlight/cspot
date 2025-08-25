@@ -1,0 +1,478 @@
+{
+  "metadata": {
+    "sticker_background_color": "#59A0F6",
+    "context_long_description": "conscious hip hop lyricism monday afternoon",
+    "image_url": "https://daylist.spotifycdn.com/headers/mobile/afternoon.jpg",
+    "created": "2025-08-25T11:56:17.555062361Z",
+    "correlation-id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e",
+    "share_image_url_4": "https://shareables.spotify.com/publish/play-something-playlist/13:56/conscious%20hip%20hop%20lyricism%20monday%20afternoon?descriptors\u003dconscious%20hip%20hop%2Clyricism%2Crhymes%2Cboom%20bap%2Cnew%20school%2Csensational%2Cwitty%2Chead%20bopping%2Cgoated%2Cimmaculate%20vibes\u0026playlistTrackCount\u003d50\u0026username\u003dfliperspotify\u0026shareCardId\u003d4\u0026locale\u003den-GB\u0026track\u003d45mVT3DCE7AATXgESSdfee\u0026track\u003d26RtX0MphIh9C7ZWJEogJL\u0026track\u003d3V8vWoCbKbfjNrPaQ4YtSg",
+    "daylist-eligible": "true",
+    "madeFor.username": "fliperspotify",
+    "daylist_pretitle": "daylist",
+    "share_data": "CsIDCrADaHR0cHM6Ly9zaGFyZWFibGVzLnNwb3RpZnkuY29tL3B1Ymxpc2gvcGxheS1zb21ldGhpbmctcGxheWxpc3QvMTM6NTYvY29uc2Npb3VzJTIwaGlwJTIwaG9wJTIwbHlyaWNpc20lMjBtb25kYXklMjBhZnRlcm5vb24/ZGVzY3JpcHRvcnM9Y29uc2Npb3VzJTIwaGlwJTIwaG9wJTJDbHlyaWNpc20lMkNyaHltZXMlMkNib29tJTIwYmFwJTJDbmV3JTIwc2Nob29sJTJDc2Vuc2F0aW9uYWwlMkN3aXR0eSUyQ2hlYWQlMjBib3BwaW5nJTJDZ29hdGVkJTJDaW1tYWN1bGF0ZSUyMHZpYmVzJnBsYXlsaXN0VHJhY2tDb3VudD01MCZ1c2VybmFtZT1mbGlwZXJzcG90aWZ5JnNoYXJlQ2FyZElkPTMmbG9jYWxlPWVuLUdCJnRyYWNrPTQ1bVZUM0RDRTdBQVRYZ0VTU2RmZWUmdHJhY2s9MjZSdFgwTXBoSWg5QzdaV0pFb2dKTCZ0cmFjaz0zVjh2V29DYktiZmpOclBhUTRZdFNnEgtjb2xsZWN0YWJsZRgBCsEDCrADaHR0cHM6Ly9zaGFyZWFibGVzLnNwb3RpZnkuY29tL3B1Ymxpc2gvcGxheS1zb21ldGhpbmctcGxheWxpc3QvMTM6NTYvY29uc2Npb3VzJTIwaGlwJTIwaG9wJTIwbHlyaWNpc20lMjBtb25kYXklMjBhZnRlcm5vb24/ZGVzY3JpcHRvcnM9Y29uc2Npb3VzJTIwaGlwJTIwaG9wJTJDbHlyaWNpc20lMkNyaHltZXMlMkNib29tJTIwYmFwJTJDbmV3JTIwc2Nob29sJTJDc2Vuc2F0aW9uYWwlMkN3aXR0eSUyQ2hlYWQlMjBib3BwaW5nJTJDZ29hdGVkJTJDaW1tYWN1bGF0ZSUyMHZpYmVzJnBsYXlsaXN0VHJhY2tDb3VudD01MCZ1c2VybmFtZT1mbGlwZXJzcG90aWZ5JnNoYXJlQ2FyZElkPTEmbG9jYWxlPWVuLUdCJnRyYWNrPTQ1bVZUM0RDRTdBQVRYZ0VTU2RmZWUmdHJhY2s9MjZSdFgwTXBoSWg5QzdaV0pFb2dKTCZ0cmFjaz0zVjh2V29DYktiZmpOclBhUTRZdFNnEgpzY3JlZW5zaG90GAEKzgMKsANodHRwczovL3NoYXJlYWJsZXMuc3BvdGlmeS5jb20vcHVibGlzaC9wbGF5LXNvbWV0aGluZy1wbGF5bGlzdC8xMzo1Ni9jb25zY2lvdXMlMjBoaXAlMjBob3AlMjBseXJpY2lzbSUyMG1vbmRheSUyMGFmdGVybm9vbj9kZXNjcmlwdG9ycz1jb25zY2lvdXMlMjBoaXAlMjBob3AlMkNseXJpY2lzbSUyQ3JoeW1lcyUyQ2Jvb20lMjBiYXAlMkNuZXclMjBzY2hvb2wlMkNzZW5zYXRpb25hbCUyQ3dpdHR5JTJDaGVhZCUyMGJvcHBpbmclMkNnb2F0ZWQlMkNpbW1hY3VsYXRlJTIwdmliZXMmcGxheWxpc3RUcmFja0NvdW50PTUwJnVzZXJuYW1lPWZsaXBlcnNwb3RpZnkmc2hhcmVDYXJkSWQ9NCZsb2NhbGU9ZW4tR0ImdHJhY2s9NDVtVlQzRENFN0FBVFhnRVNTZGZlZSZ0cmFjaz0yNlJ0WDBNcGhJaDlDN1pXSkVvZ0pMJnRyYWNrPTNWOHZXb0NiS2Jmak5yUGFRNFl0U2cSDnBsYXlsaXN0LWNvdmVyGAIiByM1OUEwRjYSwQMKsANodHRwczovL3NoYXJlYWJsZXMuc3BvdGlmeS5jb20vcHVibGlzaC9wbGF5LXNvbWV0aGluZy1wbGF5bGlzdC8xMzo1Ni9jb25zY2lvdXMlMjBoaXAlMjBob3AlMjBseXJpY2lzbSUyMG1vbmRheSUyMGFmdGVybm9vbj9kZXNjcmlwdG9ycz1jb25zY2lvdXMlMjBoaXAlMjBob3AlMkNseXJpY2lzbSUyQ3JoeW1lcyUyQ2Jvb20lMjBiYXAlMkNuZXclMjBzY2hvb2wlMkNzZW5zYXRpb25hbCUyQ3dpdHR5JTJDaGVhZCUyMGJvcHBpbmclMkNnb2F0ZWQlMkNpbW1hY3VsYXRlJTIwdmliZXMmcGxheWxpc3RUcmFja0NvdW50PTUwJnVzZXJuYW1lPWZsaXBlcnNwb3RpZnkmc2hhcmVDYXJkSWQ9MSZsb2NhbGU9ZW4tR0ImdHJhY2s9NDVtVlQzRENFN0FBVFhnRVNTZGZlZSZ0cmFjaz0yNlJ0WDBNcGhJaDlDN1pXSkVvZ0pMJnRyYWNrPTNWOHZXb0NiS2Jmak5yUGFRNFl0U2cSCnNjcmVlbnNob3QYARrOAwqwA2h0dHBzOi8vc2hhcmVhYmxlcy5zcG90aWZ5LmNvbS9wdWJsaXNoL3BsYXktc29tZXRoaW5nLXBsYXlsaXN0LzEzOjU2L2NvbnNjaW91cyUyMGhpcCUyMGhvcCUyMGx5cmljaXNtJTIwbW9uZGF5JTIwYWZ0ZXJub29uP2Rlc2NyaXB0b3JzPWNvbnNjaW91cyUyMGhpcCUyMGhvcCUyQ2x5cmljaXNtJTJDcmh5bWVzJTJDYm9vbSUyMGJhcCUyQ25ldyUyMHNjaG9vbCUyQ3NlbnNhdGlvbmFsJTJDd2l0dHklMkNoZWFkJTIwYm9wcGluZyUyQ2dvYXRlZCUyQ2ltbWFjdWxhdGUlMjB2aWJlcyZwbGF5bGlzdFRyYWNrQ291bnQ9NTAmdXNlcm5hbWU9ZmxpcGVyc3BvdGlmeSZzaGFyZUNhcmRJZD00JmxvY2FsZT1lbi1HQiZ0cmFjaz00NW1WVDNEQ0U3QUFUWGdFU1NkZmVlJnRyYWNrPTI2UnRYME1waEloOUM3WldKRW9nSkwmdHJhY2s9M1Y4dldvQ2JLYmZqTnJQYVE0WXRTZxIOcGxheWxpc3QtY292ZXIYAiIHIzU5QTBGNiJRChtkYXlsaXN0LWhlYWRlci1zaGFyZS1idXR0b24SFGRheWxpc3QtY29udGV4dC1tZW51GhxkYXlsaXN0LXNjcmVlbnNob3QtZGV0ZWN0aW9u",
+    "context_owner": "spotify",
+    "header_image_url_desktop": "https://daylist.spotifycdn.com/headers/desktop/afternoon.jpg",
+    "context_description": "conscious hip hop lyricism monday afternoon",
+    "format_list_type": "daylist-snapshot",
+    "share_image_url_2": "https://shareables.spotify.com/publish/play-something-playlist/13:56/conscious%20hip%20hop%20lyricism%20monday%20afternoon?descriptors\u003dconscious%20hip%20hop%2Clyricism%2Crhymes%2Cboom%20bap%2Cnew%20school%2Csensational%2Cwitty%2Chead%20bopping%2Cgoated%2Cimmaculate%20vibes\u0026playlistTrackCount\u003d50\u0026username\u003dfliperspotify\u0026shareCardId\u003d2\u0026locale\u003den-GB\u0026track\u003d45mVT3DCE7AATXgESSdfee\u0026track\u003d26RtX0MphIh9C7ZWJEogJL\u0026track\u003d3V8vWoCbKbfjNrPaQ4YtSg",
+    "request_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+  },
+  "pages": [
+    {
+      "tracks": [
+        {
+          "uri": "spotify:track:45mVT3DCE7AATXgESSdfee",
+          "uid": "63643534386664656362383333396133",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "63643534386664656362383333396133",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:26RtX0MphIh9C7ZWJEogJL",
+          "uid": "37636334386634656464336539373633",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "37636334386634656464336539373633",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3V8vWoCbKbfjNrPaQ4YtSg",
+          "uid": "32383539666631303030386364656431",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "32383539666631303030386364656431",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3lGHMz9BIUZWFEx0fhS4VF",
+          "uid": "37366239353566396436323466653939",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "37366239353566396436323466653939",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3tq1hLwEtiAJ7Cr9ghjshV",
+          "uid": "65343863333434356431323033333633",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "65343863333434356431323033333633",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0mwlZQjUxspUTpAzLwexw7",
+          "uid": "39326636616662623964623866336264",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "39326636616662623964623866336264",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:05cAjRFbioNoB0vhDyzCod",
+          "uid": "31663265363761366330363366343262",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31663265363761366330363366343262",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0yOv5G96Ekeqj5184btVXQ",
+          "uid": "66613835376331336630643832613438",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "66613835376331336630643832613438",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6phik4BkqTBtDodw8ZJJ5Q",
+          "uid": "65363363306236363336383562383531",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "65363363306236363336383562383531",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:5jUTUtASaCSvod7opmnTlH",
+          "uid": "62623566653963383163363961396434",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "62623566653963383163363961396434",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:4OLhh8d7T5RUXrQZMTX7eh",
+          "uid": "66313361363230613237666439373565",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "66313361363230613237666439373565",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:5lFf9WQMwthejzRre8ObNf",
+          "uid": "36663034646662323439363634636636",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "36663034646662323439363634636636",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6MGDifi2vBHgHLpqCUmX16",
+          "uid": "30356537363833343731383634383766",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "30356537363833343731383634383766",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6CBurTHmYJhIcDD72Qgjnm",
+          "uid": "36663134373763666538636161336436",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "36663134373763666538636161336436",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:1KOqY0QTSadQFRgbNw1sLh",
+          "uid": "37626539306236623933353535343866",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "37626539306236623933353535343866",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:1FLskKiqnrOZdtNSRnC7Ng",
+          "uid": "32643933653236303461346637333936",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "32643933653236303461346637333936",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6N0b6jlahlvHsV5MyZd0f8",
+          "uid": "62346365396337386565646261643738",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "62346365396337386565646261643738",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0pcg2zZQOw0G0ZYbjS6smW",
+          "uid": "39316237663463623137306264643630",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "39316237663463623137306264643630",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3de2b8uTodAM7Fb45QooT2",
+          "uid": "31373235363634643461356433643336",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31373235363634643461356433643336",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:06ZX08uRQDK02emdw9mN28",
+          "uid": "31376639376532663466393266356532",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31376639376532663466393266356532",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:1xRLIZjXpB1QhPs1uYvQAK",
+          "uid": "64623961306237313964333265303135",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "64623961306237313964333265303135",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3J4lO2oyDMLEYGdHgRcJHW",
+          "uid": "31346131383930613435663763653461",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31346131383930613435663763653461",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:7DIMKlmJ0CL6eROkbptoqi",
+          "uid": "37376362633035386661643263333837",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "37376362633035386661643263333837",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:1vlR2uBjK3TUM8rcU7F43Z",
+          "uid": "63613465656461643934333939616462",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "63613465656461643934333939616462",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0fkQhqblpnW60SS0mYUHbn",
+          "uid": "62383866363138643932353333646132",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "62383866363138643932353333646132",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:4m29PyiwrsG3ycQr3R1P3T",
+          "uid": "38656132656364633931363432623134",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "38656132656364633931363432623134",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:259op6g3A12uwePehZntdk",
+          "uid": "31306662363532376131336239623838",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31306662363532376131336239623838",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:12wvLk3fOmOonVmH0TtQ8L",
+          "uid": "34636236396364613661633265333035",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "34636236396364613661633265333035",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:5Y2MNlEnIjvoU91hQnZc3b",
+          "uid": "61393665663564373238333138306532",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "61393665663564373238333138306532",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6XYJ6RL7GkuDtLxXnsAPkd",
+          "uid": "39653337353238386262356262363738",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "39653337353238386262356262363738",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0zAEYV8TCz7YVpw4QcIYcA",
+          "uid": "31386531333161353633633966663663",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31386531333161353633633966663663",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:24rgAXRpEipfaxJNElCXPE",
+          "uid": "62323035366433373438643033336335",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "62323035366433373438643033336335",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0XGuDA5xXdvMVIQPFXTkCK",
+          "uid": "39303832396363383232343534353232",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "39303832396363383232343534353232",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:7er0EUMY653mxZ1NVD9mwQ",
+          "uid": "63356339383764646362626636356432",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "63356339383764646362626636356432",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:61b65LQ9rxhcMtDEusHPZL",
+          "uid": "62623335363961386437356336373034",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "62623335363961386437356336373034",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6yZPdc1jlYnG9QFG8WnrMm",
+          "uid": "63653535306234616639613663383530",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "63653535306234616639613663383530",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:09Btkoj4YIm36KVJqomiCE",
+          "uid": "31353132393462633965303136616435",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31353132393462633965303136616435",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3znSvEwBq09We4cxxmwlZM",
+          "uid": "33623430623438323262636566663837",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "33623430623438323262636566663837",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:7aYGCP34Xo6XujY7Ix1DxB",
+          "uid": "36323637343863613439393733613538",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "36323637343863613439393733613538",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:4M2t7bP4Mq87mGMn0PObUX",
+          "uid": "35373564326438626161303365366562",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "35373564326438626161303365366562",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:3q8mXT1racKde1h8zHY1ko",
+          "uid": "66613635643934363431363866386234",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "66613635643934363431363866386234",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:4GWcQfqUzEIGsx2xFuJjcF",
+          "uid": "64646562663364666638393736306636",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "64646562663364666638393736306636",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:6jJTlYkddJONCQQVzWFzcQ",
+          "uid": "31353230363565316161303664643865",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "31353230363565316161303664643865",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:5b8rORKYieWFjO4GzrzqUz",
+          "uid": "63376537366531383139353637363736",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "63376537366531383139353637363736",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:4waPZF96vX1Oz5pzH6dB0h",
+          "uid": "36656166646666633731316263323834",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "36656166646666633731316263323834",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:08DsqiAmlGHFGFeDQMTSep",
+          "uid": "37656661306535333364323933313261",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "37656661306535333364323933313261",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:0YuyVhWgiZck9Ha5WXS61Q",
+          "uid": "39316437306531666165623236373133",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "39316437306531666165623236373133",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:4pVfxGMIMpPTr1bUkvZYD1",
+          "uid": "63396635396331396439633835616233",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "63396635396331396439633835616233",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:76jsGLoaUN5kgYglcACpvC",
+          "uid": "38316631653962656339383061396330",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "38316631653962656339383061396330",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        },
+        {
+          "uri": "spotify:track:1F1OWM6IeFXhJjnkLxJUur",
+          "uid": "38366263343036396338343634653138",
+          "metadata": {
+            "added_by_username": "spotify",
+            "highlight_id": "38366263343036396338343634653138",
+            "decision_id": "ssp~063d2f3e3f2a92227dfe96288f91c649ef8e"
+          }
+        }
+      ]
+    }
+  ],
+  "uri": "spotify:playlist:37i9dQZF1FbDk7WZs0loln",
+  "url": "context://spotify:playlist:37i9dQZF1FbDk7WZs0loln"
+}
