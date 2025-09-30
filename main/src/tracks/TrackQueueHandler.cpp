@@ -3,7 +3,6 @@
 #include "bell/http/Client.h"
 #include "crypto/Base62.h"
 #include "events/EventLoop.h"
-#include "fmt/color.h"
 #include "proto/ConnectPb.h"
 #include "proto/SpotifyId.h"
 #include "tl/expected.hpp"
@@ -86,6 +85,8 @@ class DefaultTrackQueueHandler : public TrackQueueHandler {
   std::vector<cspot_proto::ContextTrack> queue;
   bool isPlayingQueue = false;
 
+  std::string currentContextUri;
+
   ContextPageParser pageParser;
 
   SpotifyIdType contextIdType = SpotifyIdType::Track;
@@ -130,20 +131,57 @@ DefaultTrackQueueHandler::DefaultTrackQueueHandler(
 bell::Result<> DefaultTrackQueueHandler::loadContext(
     const std::string& contextUri, std::optional<std::string> currentTrackUri,
     std::optional<std::string> currentTrackUid) {
-  resetContext();
-  targetTrackIds = {currentTrackUri.value_or(""), currentTrackUid.value_or("")};
+  // In case we only have UID, we need to refetch the pages either way - we only keep the gids
+  if (currentContextUri != contextUri || !currentTrackUri.has_value()) {
+    // New context, reset everything
+    resetContext();
+    targetTrackIds = {currentTrackUri.value_or(""),
+                      currentTrackUid.value_or("")};
 
-  contextIdType = SpotifyIdType::Track;
-  if (contextUri.starts_with("spotify:show")) {
-    // TODO: Better handling of the id types here
-    contextIdType = SpotifyIdType::Episode;
-  }
+    contextIdType = SpotifyIdType::Track;
 
-  auto res = fetchRootPage(contextUri);
-  if (!res) {
-    BELL_LOG(error, LOG_TAG, "Could not resolve context root, uri={}, err={}",
-             contextUri, res.error());
-    return tl::make_unexpected(res.error());
+    if (!currentTrackUid && !currentTrackUri) {
+      contextIndex = {
+          0,
+          0,
+      };  // Start from the beginning if no current track is provided
+    }
+
+    if (contextUri.starts_with("spotify:show")) {
+      // TODO: Better handling of the id types here
+      contextIdType = SpotifyIdType::Episode;
+    }
+
+    auto res = fetchRootPage(contextUri);
+    if (!res) {
+      BELL_LOG(error, LOG_TAG, "Could not resolve context root, uri={}, err={}",
+               contextUri, res.error());
+      return tl::make_unexpected(res.error());
+    }
+  } else {
+    // Same context, only reset the current index & queue
+    contextIndex.reset();
+    queue.clear();
+    isPlayingQueue = false;
+
+    targetTrackIds = {currentTrackUri.value_or(""),
+                      currentTrackUid.value_or("")};
+
+    auto targetGid = uriToGid(*currentTrackUri);
+
+    for (size_t pageIdx = 0; pageIdx < contextPages.size(); pageIdx++) {
+      auto trackItr =
+          std::find(contextPages[pageIdx].trackGids.begin(),
+                    contextPages[pageIdx].trackGids.end(), targetGid);
+      if (trackItr != contextPages[pageIdx].trackGids.end()) {
+        // Found current track in the parsed data
+        contextIndex = {
+            static_cast<uint32_t>(pageIdx),
+            static_cast<uint32_t>(std::distance(
+                contextPages[pageIdx].trackGids.begin(), trackItr))};
+        break;
+      }
+    }
   }
 
   for (auto& page : contextPages) {
@@ -169,9 +207,13 @@ bell::Result<> DefaultTrackQueueHandler::loadContext(
     BELL_LOG(info, LOG_TAG, "Found current track at index=[{},{}]",
              contextIndex->track, contextIndex->page);
   } else {
-    BELL_LOG(error, LOG_TAG,
-             "Could not find current track in the given context");
-    return bell::make_unexpected_errc(std::errc::invalid_argument);
+    BELL_LOG(
+        error, LOG_TAG,
+        "Could not find current track in the given context, default to zero");
+    contextIndex = {
+        0,
+        0,
+    };  // Default to start if we could not find the current track
   }
 
   return {};
@@ -254,6 +296,7 @@ bell::Result<> DefaultTrackQueueHandler::ensureEnoughTracks() {
 
 bell::Result<> DefaultTrackQueueHandler::fetchRootPage(
     const std::string& rootContextUri) {
+  this->currentContextUri = rootContextUri;
   BELL_LOG(info, LOG_TAG, "Fetching context root, uri={}", rootContextUri);
   pageParser.reset();
   auto res = spClient->contextResolve(rootContextUri);
@@ -344,6 +387,7 @@ void DefaultTrackQueueHandler::resetContext() {
   targetTrackIds = {};
   nextTracksWindow.fill(cspot_proto::ProvidedTrack{});
   previousTracksWindow.fill(cspot_proto::ProvidedTrack{});
+  currentContextUri.clear();
 }
 
 std::optional<cspot_proto::ProvidedTrack>
@@ -550,12 +594,8 @@ void DefaultTrackQueueHandler::updateTrackWindows() {
 
       auto& gid = contextPages[offsetIndex->page].trackGids[offsetIndex->track];
 
-      if (!nextTracksWindow[x].gid && !nextTracksWindow[x].uri.empty()) {
-        nextTracksWindow[x].gid = gid;
-      }
-
       if (offsetIndex.has_value()) {
-        if (nextTracksWindow[x].gid != gid) {
+        if (!nextTracksWindow[x].gid || (nextTracksWindow[x].gid != gid)) {
           updated = true;
 
           // Construct ProvidedTrack from next context track
@@ -563,6 +603,7 @@ void DefaultTrackQueueHandler::updateTrackWindows() {
           nextTracksWindow[x].uri = trackId.uri;
           nextTracksWindow[x].uid = "";
           nextTracksWindow[x].provider = "context";
+          nextTracksWindow[x].gid = gid;
         }
 
         highestValidIndex = x;
@@ -593,16 +634,12 @@ void DefaultTrackQueueHandler::updateTrackWindows() {
         auto& gid =
             contextPages[offsetIndex->page].trackGids[offsetIndex->track];
 
-        if (!previousTracksWindow[x].gid &&
-            !previousTracksWindow[x].uri.empty()) {
-          previousTracksWindow[x].gid = gid;
-        }
-
         // Construct ProvidedTrack from previous context track
         SpotifyId trackId(contextIdType, gid);
         previousTracksWindow[x].uri = trackId.uri;
         previousTracksWindow[x].uid = "";
         previousTracksWindow[x].provider = "context";
+        previousTracksWindow[x].gid = gid;
       } else {
         previousTracksWindow[x] = {};
       }
@@ -636,6 +673,7 @@ void DefaultTrackQueueHandler::updateTrackWindows() {
 
     // Post queue updated event
     eventLoop->post(EventLoop::EventType::QUEUE_UPDATED, updateEvent);
+    BELL_LOG(info, LOG_TAG, "Posted queue update event");
   }
 }
 

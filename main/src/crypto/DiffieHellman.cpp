@@ -122,6 +122,8 @@ std::string DH::getPublicKeyBase64() {
     throw std::runtime_error("Failed to calculate base64 encoded public key");
   }
 
+  publicKeyBase64.resize(publicKeyBase64.size() - 1);  // Remove null terminator
+
   // Convert public key to string
   return publicKeyBase64;
 }

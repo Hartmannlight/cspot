@@ -1,4 +1,4 @@
-#include <LoginBlob.h>
+#include <Authenticator.h>
 
 #include <string_view>
 
@@ -9,56 +9,30 @@
 #include <mbedtls/base64.h>
 #include <mbedtls/pkcs5.h>
 #include <tao/json.hpp>
-#include "Utils.h"
+#include "authentication.pb.h"
 #include "bell/Result.h"
 #include "bell/net/URIParser.h"
+#include "proto/AuthenticationPb.h"
 #include "tl/expected.hpp"
 
 using namespace cspot;
 
 namespace {
-// Constants
-const std::string deviceIdPrefix = "142137fd329622137a149016";
+
 const std::string protocolVersion = "2.7.1";
 const std::string swVersion = "2.0.0";
 const std::string brandName = "cspot";
 const std::string deviceType = "SPEAKER";
 }  // namespace
 
-LoginBlob::LoginBlob() {
+Authenticator::Authenticator() {
   // Cache it, so we don't have to recalculate it
   dhPublicKey = dhPair.getPublicKeyBase64();
 }
 
-void LoginBlob::setDeviceName(const std::string& deviceName) {
-  std::scoped_lock lock(accessMutex);
-  this->deviceName = deviceName;
-  // Recalculate device ID
-  this->deviceId = fmt::format("{}{:016x}", deviceIdPrefix,
-                               std::hash<std::string>{}(deviceName));
-}
-
-std::string LoginBlob::getUsername() {
-  std::scoped_lock lock(accessMutex);
-  return username;
-}
-
-std::string LoginBlob::getDeviceName() {
-  std::scoped_lock lock(accessMutex);
-  return deviceName;
-}
-
-std::string LoginBlob::getDeviceId() {
-  std::scoped_lock lock(accessMutex);
-  return deviceId;
-}
-
-bool LoginBlob::isAuthenticated() {
-  std::scoped_lock lock(accessMutex);
-  return !authBlob.empty();
-}
-
-std::string LoginBlob::buildZeroconfJSONResponse() {
+std::string Authenticator::buildZeroconfJSONResponse(
+    std::string_view deviceName, std::string_view deviceId,
+    std::string_view activeUser) {
   std::scoped_lock lock(accessMutex);
 
   tao::json::value obj;
@@ -82,94 +56,32 @@ std::string LoginBlob::buildZeroconfJSONResponse() {
   obj["deviceID"] = deviceId;
   obj["remoteName"] = deviceName;
   obj["publicKey"] = dhPublicKey;
-  obj["activeUser"] = username;
+  obj["activeUser"] = activeUser;
 
   return tao::json::to_string(obj);
 }
 
-bell::Result<tao::json::value> LoginBlob::getJSONForStorage() {
-  std::scoped_lock lock(accessMutex);
-
-  if (!isAuthenticated()) {
-    BELL_LOG(error, LOG_TAG,
-             "Cannot get JSON for storage, user is not authenticated");
-    return bell::make_unexpected_errc<tao::json::value>(
-        std::errc::operation_not_permitted);
-  }
-
-  tao::json::value obj;
-  obj["deviceName"] = deviceName;
-  obj["deviceId"] = deviceId;
-  obj["username"] = username;
-  obj["authType"] = authType;
-  obj["authBlob"] = base64Encode(authBlob.data(), authBlob.size());
-
-  return obj;
-}
-
-bell::Result<> LoginBlob::restoreFromJSON(const tao::json::value& jsonData) {
-  std::scoped_lock lock(accessMutex);
-
-  if (!jsonData.is_object()) {
-    BELL_LOG(error, LOG_TAG, "JSON data is not an object");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-
-  if (!jsonData.at("deviceName").is_string()) {
-    BELL_LOG(error, LOG_TAG, "Device name not found in JSON data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-  deviceName = jsonData.at("deviceName").get_string();
-
-  if (!jsonData.at("deviceId").is_string()) {
-    BELL_LOG(error, LOG_TAG, "Device ID not found in JSON data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-  deviceId = jsonData.at("deviceId").get_string();
-
-  if (!jsonData.at("username").is_string()) {
-    BELL_LOG(error, LOG_TAG, "Username not found in JSON data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-  username = jsonData.at("username").get_string();
-
-  if (!jsonData.at("authType").is_number()) {
-    BELL_LOG(error, LOG_TAG, "Auth type not found in JSON data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-  authType = jsonData.at("authType").get_unsigned();
-
-  if (!jsonData.at("authBlob").is_string()) {
-    BELL_LOG(error, LOG_TAG, "Auth blob not found in JSON data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-
-  auto authBlobBase64 = jsonData.at("authBlob").get_string();
-  auto decodeRes = base64Decode(authBlobBase64, authBlob);
-  if (!decodeRes) {
-    BELL_LOG(error, LOG_TAG, "Failed to base64 decode auth blob");
-    return decodeRes;
-  }
-
-  return {};
-}
-
-bell::Result<> LoginBlob::authenticateZeroconfQuery(
+bell::Result<cspot_proto::LoginCredentials>
+Authenticator::authenticateZeroconfQuery(
+    std::string_view deviceId,
     const std::unordered_map<std::string, std::string>& queryParams) {
   if (!queryParams.contains("blob") || queryParams.at("blob").empty()) {
     BELL_LOG(error, LOG_TAG, "Blob not found in query string");
-    return bell::make_unexpected_errc(std::errc::bad_message);
+    return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+        std::errc::bad_message);
   }
 
   if (!queryParams.contains("deviceId") || queryParams.at("deviceId").empty()) {
     BELL_LOG(error, LOG_TAG, "Device ID not found in query string");
-    return bell::make_unexpected_errc(std::errc::bad_message);
+    return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+        std::errc::bad_message);
   }
 
   if (!queryParams.contains("clientKey") ||
       queryParams.at("clientKey").empty()) {
     BELL_LOG(error, LOG_TAG, "Client key not found in query string");
-    return bell::make_unexpected_errc(std::errc::bad_message);
+    return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+        std::errc::bad_message);
   }
   // Holds base64 decoded blob and client key
   std::vector<std::byte> decodedBlob;
@@ -178,30 +90,29 @@ bell::Result<> LoginBlob::authenticateZeroconfQuery(
   auto res = base64Decode(queryParams.at("blob"), decodedBlob);
   if (!res) {
     BELL_LOG(error, LOG_TAG, "Failed to base64 decode blob");
-    return res;
+    return tl::make_unexpected(res.error());
   }
 
   res = base64Decode(queryParams.at("clientKey"), decodedClientKey);
   if (!res) {
     BELL_LOG(error, LOG_TAG, "Failed to base64 decode client key");
-    return res;
+    return tl::make_unexpected(res.error());
   }
 
-  username = queryParams.at("userName");
+  std::string username = queryParams.at("userName");
   auto encryptedAuthBlobRes = decodeZeroconfBlob(decodedBlob, decodedClientKey);
   if (!encryptedAuthBlobRes) {
     BELL_LOG(error, LOG_TAG, "Failed to decode zeroconf blob");
     return tl::make_unexpected(encryptedAuthBlobRes.error());
   }
 
-  encryptedAuthBlob = *encryptedAuthBlobRes;
-
   // Decode the auth blob
-  return decodeEncryptedAuthBlob(username, encryptedAuthBlob);
+  return decodeEncryptedAuthBlob(deviceId, username, *encryptedAuthBlobRes);
 }
 
-bell::Result<> LoginBlob::authenticateZeroconfString(
-    std::string_view queryString) {
+bell::Result<cspot_proto::LoginCredentials>
+Authenticator::authenticateZeroconfString(std::string_view deviceId,
+                                          std::string_view queryString) {
   std::scoped_lock lock(accessMutex);
 
   // Parse the query string
@@ -215,7 +126,8 @@ bell::Result<> LoginBlob::authenticateZeroconfString(
 
     size_t eqPos = queryString.find('=', pos);
     if (eqPos == std::string::npos || eqPos > nextPos) {
-      return bell::make_unexpected_errc(std::errc::invalid_argument);
+      return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+          std::errc::invalid_argument);
     }
 
     // Perform URL decoding
@@ -228,15 +140,10 @@ bell::Result<> LoginBlob::authenticateZeroconfString(
     pos = nextPos + 1;
   }
 
-  return authenticateZeroconfQuery(queryParams);
+  return authenticateZeroconfQuery(deviceId, queryParams);
 }
 
-std::vector<std::byte> LoginBlob::getStoredAuthBlob() {
-  std::scoped_lock lock(accessMutex);
-  return authBlob;
-}
-
-bell::Result<std::vector<std::byte>> LoginBlob::decodeZeroconfBlob(
+bell::Result<std::vector<std::byte>> Authenticator::decodeZeroconfBlob(
     const std::vector<std::byte>& blob,
     const std::vector<std::byte>& clientKey) {
   std::scoped_lock lock(accessMutex);
@@ -288,7 +195,7 @@ bell::Result<std::vector<std::byte>> LoginBlob::decodeZeroconfBlob(
 
   // needed for AES internal cache
   size_t off = 0;
-  std::array<uint8_t, 16> streamBlock;
+  std::array<uint8_t, 16> streamBlock{};
 
   // set IV
   if (mbedtls_aes_setkey_enc(
@@ -300,7 +207,7 @@ bell::Result<std::vector<std::byte>> LoginBlob::decodeZeroconfBlob(
         std::errc::bad_message);
   }
 
-  std::array<std::byte, 16> nounceCounter;
+  std::array<std::byte, 16> nounceCounter{};
   std::copy(iv.begin(), iv.end(), nounceCounter.begin());
 
   std::vector<std::byte> authBlob;
@@ -324,8 +231,9 @@ bell::Result<std::vector<std::byte>> LoginBlob::decodeZeroconfBlob(
   return authBlob;
 }
 
-bell::Result<> LoginBlob::decodeEncryptedAuthBlob(
-    const std::string& username,
+bell::Result<cspot_proto::LoginCredentials>
+Authenticator::decodeEncryptedAuthBlob(
+    std::string_view deviceId, std::string_view username,
     const std::vector<std::byte>& encryptedAuthBlob) {
   std::scoped_lock lock(accessMutex);
 
@@ -337,12 +245,12 @@ bell::Result<> LoginBlob::decodeEncryptedAuthBlob(
 
   if (!decodeRes) {
     BELL_LOG(error, LOG_TAG, "Failed to base64 decode auth blob");
-    return decodeRes;
+    return tl::make_unexpected(decodeRes.error());
   }
 
   // Calculate the pbkdf2 hmac
-  std::array<std::byte, 20> deviceIdDigest;
-  std::array<std::byte, 20> pbkdf2Hmac;
+  std::array<std::byte, 20> deviceIdDigest{};
+  std::array<std::byte, 20> pbkdf2Hmac{};
   sha1Context.reset();
   sha1Context.getDigest(reinterpret_cast<const std::byte*>(deviceId.data()),
                         deviceId.size(), deviceIdDigest.data());
@@ -354,7 +262,8 @@ bell::Result<> LoginBlob::decodeEncryptedAuthBlob(
   if (res != 0) {
     BELL_LOG(error, LOG_TAG, "Failed to calculate pbkdf2, mbedtls error: {}",
              res);
-    return bell::make_unexpected_errc<>(std::errc::bad_message);
+    return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+        std::errc::bad_message);
   }
 
   // Calculate the sha1 hmac
@@ -377,7 +286,8 @@ bell::Result<> LoginBlob::decodeEncryptedAuthBlob(
           192) != 0) {
     BELL_LOG(error, LOG_TAG, "Failed to set AES key");
     mbedtls_aes_free(&aesCtx);
-    return bell::make_unexpected_errc<>(std::errc::bad_message);
+    return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+        std::errc::bad_message);
   }
 
   for (uint64_t x = 0; x < base64DecodedAuthData.size() / 16; x++) {
@@ -390,7 +300,8 @@ bell::Result<> LoginBlob::decodeEncryptedAuthBlob(
             reinterpret_cast<uint8_t*>(decryptedChunk.data())) != 0) {
       BELL_LOG(error, LOG_TAG, "Failed to aes decrypt auth data");
       mbedtls_aes_free(&aesCtx);
-      return bell::make_unexpected_errc<>(std::errc::bad_message);
+      return bell::make_unexpected_errc<cspot_proto::LoginCredentials>(
+          std::errc::bad_message);
     }
 
     std::copy(decryptedChunk.begin(), decryptedChunk.end(),
@@ -414,25 +325,24 @@ bell::Result<> LoginBlob::decodeEncryptedAuthBlob(
   // Skip the next uvarint of bytes
   blobBinaryStream.skip(readUvarint(blobBinaryStream) + 1);
 
-  authType = readUvarint(blobBinaryStream);
+  uint32_t authType = readUvarint(blobBinaryStream);
   blobBinaryStream.skip(1);  // Skip the next byte
 
   uint32_t authDataSize = readUvarint(blobBinaryStream);
-  authBlob.resize(authDataSize);
-  blobMemoryStream.read(reinterpret_cast<char*>(authBlob.data()), authDataSize);
+  cspot_proto::LoginCredentials credentials;
 
-  BELL_LOG(info, LOG_TAG, "Auth type: {}", authType);
-  BELL_LOG(info, LOG_TAG, "Auth blob len: {}", authBlob.size());
+  // Construct login credentials
+  credentials.authData.resize(authDataSize);
+  credentials.username = std::string(username);
+  credentials.type = static_cast<AuthenticationType>(authType);
+  blobMemoryStream.read(reinterpret_cast<char*>(credentials.authData.data()),
+                        authDataSize);
 
-  return {};
+  BELL_LOG(info, LOG_TAG, "Authenticated user {}", credentials.username);
+  return credentials;
 }
 
-uint32_t LoginBlob::getAuthType() {
-  std::scoped_lock lock(accessMutex);
-  return authType;
-}
-
-uint32_t LoginBlob::readUvarint(bell::io::BinaryStream& stream) {
+uint32_t Authenticator::readUvarint(bell::io::BinaryStream& stream) {
   uint8_t lo;
   stream >> lo;
   if ((int)(lo & 0x80) == 0) {
@@ -445,8 +355,8 @@ uint32_t LoginBlob::readUvarint(bell::io::BinaryStream& stream) {
   return (uint32_t)((lo & 0x7f) | (hi << 7));
 }
 
-bell::Result<> LoginBlob::base64Decode(std::string_view encoded,
-                                       std::vector<std::byte>& targetBuffer) {
+bell::Result<> Authenticator::base64Decode(
+    std::string_view encoded, std::vector<std::byte>& targetBuffer) {
   size_t outputSize = 0;
   int res = mbedtls_base64_decode(
       nullptr, 0, &outputSize, reinterpret_cast<const uint8_t*>(encoded.data()),

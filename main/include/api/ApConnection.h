@@ -6,6 +6,7 @@
 #include <vector>
 
 // Library includes
+#include "AuthInfo.h"
 #include "bell/Result.h"
 #include "bell/net/SocketPollListener.h"
 #include "bell/net/TCPSocket.h"
@@ -21,6 +22,8 @@
 namespace cspot {
 class ApConnection {
  public:
+  ApConnection(const std::shared_ptr<cspot::AuthInfo>& authInfo);
+
   // Type for the packet handler function
   using ConnectionPacketHandler = std::function<void(
       uint8_t packetType, const std::byte* data, size_t len)>;
@@ -28,8 +31,9 @@ class ApConnection {
   /**
    * @brief Connects to the AP, address fetched from the credential resolver
    */
-  bell::Result<> connect(const std::string& apAddress,
-                         const std::shared_ptr<bell::SocketPollListener>& socketPoll);
+  bell::Result<> connect(
+      const std::string& apAddress,
+      const std::shared_ptr<bell::SocketPollListener>& socketPoll);
 
   /**
    * @brief Sends a shannon encrypted packet to the AP
@@ -71,6 +75,7 @@ class ApConnection {
   const char* LOG_TAG = "ApConnection";
   const static uint32_t operationTimeout = 3000;
 
+  std::shared_ptr<cspot::AuthInfo> authInfo;
   std::shared_ptr<bell::net::TCPSocket> apSock;
   DH dhPair;
 

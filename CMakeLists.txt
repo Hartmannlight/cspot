@@ -20,6 +20,6 @@ if(CSPOT_TARGET_ESP32)
 endif()
 
 if(CSPOT_TARGET_TESTS)
-  add_subdirectory(main)
-  project(cspot_tests)
+    add_subdirectory(main)
+    project(cspot_tests)
 endif()

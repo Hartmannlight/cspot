@@ -16,7 +16,7 @@ namespace cspot {
 class EventLoop : public bell::Task {
  public:
   EventLoop();
-  ~EventLoop() {};
+  ~EventLoop() override { stopTask(); };
 
   enum class EventType {
     DEALER_REQUEST,
@@ -25,12 +25,16 @@ class EventLoop : public bell::Task {
     CURRENT_TRACK_METADATA,
     AUDIO_KEY,
     QUEUE_UPDATED,
+    PLAYER_PLAY,
+    PLAYER_FLUSH,
+    PLAYER_STATE_UPDATED
   };
 
   // Define all possible event payload types
   using EventPayload =
-      std::variant<std::monostate, CurrentTrackMetadata,
-                   AudioKeyResponse, TrackQueueUpdate, ProvidedFile, tao::json::value>;
+      std::variant<std::monostate, bool, CurrentTrackMetadata, AudioKeyResponse,
+                   TrackQueueUpdate, ProvidedFile, PlayerStateUpdate,
+                   tao::json::value>;
 
   struct Event {
     EventType type;

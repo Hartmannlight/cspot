@@ -9,24 +9,31 @@
 
 using namespace cspot;
 
-FileProvider::FileProvider(std::shared_ptr<SessionContext> sessionContext,
+FileProvider::FileProvider(std::shared_ptr<EventLoop> eventLoop,
                            std::shared_ptr<SpClient> spClient,
                            std::shared_ptr<ApClient> apClient)
     : bell::Task("cspot_file_provider", 4 * 1024, false),
-      sessionContext(std::move(sessionContext)),
+      eventLoop(std::move(eventLoop)),
       spClient(std::move(spClient)),
       apClient(std::move(apClient)) {
 
   startTask();
 
-  this->sessionContext->eventLoop->registerHandler(
+  this->eventLoop->registerHandler(
       EventLoop::EventType::AUDIO_KEY, [this](EventLoop::Event&& event) {
+        auto ev = std::move(event);
+        auto res = std::get<AudioKeyResponse>(ev.payload);
+
         BELL_LOG(info, LOG_TAG,
                  "Handling audio key response event for track ID: {}",
-                 std::get<AudioKeyResponse>(event.payload).trackId.hexGid());
+                 res.trackId.hexGid());
         // Handle audio key response event
-        handleAudioKeyResponse(std::get<AudioKeyResponse>(event.payload));
+        handleAudioKeyResponse(res);
       });
+}
+
+FileProvider::~FileProvider() {
+  stopTask();
 }
 
 void FileProvider::provideTrack(const SpotifyId& trackId) {
@@ -37,6 +44,18 @@ void FileProvider::provideTrack(const SpotifyId& trackId) {
 
   // Notify semaphore of new file
   providedFileSemaphore.give();
+}
+
+void FileProvider::cancel(const SpotifyId& trackId) {
+  std::scoped_lock lock(providedFilesMutex);
+
+  auto it = std::remove_if(
+      currentlyProvidedFiles.begin(), currentlyProvidedFiles.end(),
+      [&trackId](const ProvidedFile& file) { return file.itemId == trackId; });
+
+  if (it != currentlyProvidedFiles.end()) {
+    currentlyProvidedFiles.erase(it, currentlyProvidedFiles.end());
+  }
 }
 
 void FileProvider::taskLoop() {
@@ -65,8 +84,7 @@ void FileProvider::taskLoop() {
                metadataRes.error());
 
       // Post failure
-      sessionContext->eventLoop->post(EventLoop::EventType::FILE_PROVIDED,
-                                      *file);
+      eventLoop->post(EventLoop::EventType::FILE_PROVIDED, *file);
       return;
     }
 
@@ -83,8 +101,7 @@ void FileProvider::taskLoop() {
       BELL_LOG(info, LOG_TAG, "Could not find suitable audio file");
 
       // Post failure
-      sessionContext->eventLoop->post(EventLoop::EventType::FILE_PROVIDED,
-                                      *file);
+      eventLoop->post(EventLoop::EventType::FILE_PROVIDED, *file);
       return;
     }
 
@@ -97,8 +114,7 @@ void FileProvider::taskLoop() {
                cdnUrlRes.error());
 
       // Post failure
-      sessionContext->eventLoop->post(EventLoop::EventType::FILE_PROVIDED,
-                                      *file);
+      eventLoop->post(EventLoop::EventType::FILE_PROVIDED, *file);
       return;
     }
 
@@ -115,8 +131,10 @@ void FileProvider::taskLoop() {
       auto requestRes = apClient->requestAudioKey(file->itemId, file->fileId);
       if (!requestRes) {
         // Post failure
-        sessionContext->eventLoop->post(EventLoop::EventType::FILE_PROVIDED,
-                                        *file);
+        file->isError = true;
+        BELL_LOG(info, LOG_TAG, "Could not request audio key, err={}",
+                 requestRes.error());
+        eventLoop->post(EventLoop::EventType::FILE_PROVIDED, *file);
         return;
       }
     }
@@ -139,6 +157,6 @@ void FileProvider::handleAudioKeyResponse(const AudioKeyResponse& response) {
     file.isError = false;  // success
 
     // post result
-    sessionContext->eventLoop->post(EventLoop::EventType::FILE_PROVIDED, file);
+    eventLoop->post(EventLoop::EventType::FILE_PROVIDED, file);
   }
 }

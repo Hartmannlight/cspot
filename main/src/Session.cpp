@@ -1,128 +1,161 @@
-// #include "Session.h"
+#include "Session.h"
 
-// #include <string>
-// #include <tao/json.hpp>
-// #include <tao/json/traits.hpp>
-// #include "bell/Logger.h"
-// #include "connect.pb.h"
-// #include "events/EventLoop.h"
+#include <string>
+#include <tao/json.hpp>
+#include <tao/json/traits.hpp>
+#include "api/CredentialsResolver.h"
+#include "api/DealerClient.h"
+#include "api/SpClient.h"
+#include "bell/Logger.h"
+#include "connect.pb.h"
+#include "events/EventLoop.h"
 
-// using namespace cspot;
+using namespace cspot;
 
-// cspot::Session::Session(std::shared_ptr<LoginBlob> loginBlob)
-//     : loginBlob(std::move(loginBlob)) {
-//   // Prepare the session context
-//   sessionContext = std::make_shared<SessionContext>();
-//   sessionContext->loginBlob = this->loginBlob;
-//   sessionContext->eventLoop = std::make_shared<cspot::EventLoop>();
-//   // sessionContext->credentialsResolver =
-//   //     std::make_shared<CredentialsResolver>(this->loginBlob);
+cspot::Session::Session(std::shared_ptr<AuthInfo> authInfo)
+    : authInfo(std::move(authInfo)) {
+  // Prepare the session context
+  eventLoop = std::make_shared<cspot::EventLoop>();
+  socketPoll = std::make_shared<bell::SocketPollListener>();
+  credentialsResolver = createDefaultCredentialsResolver(
+      std::make_shared<bell::HTTPClient>(), this->authInfo);
+  spClient = createDefaultSpClient(std::make_shared<bell::HTTPClient>(),
+                                   credentialsResolver);
+  dealerClient = std::make_shared<DealerClient>(eventLoop);
+  apClient = std::make_unique<ApClient>(eventLoop, this->authInfo);
 
-//   // Prepare the dealer client
-//   dealerClient = std::make_shared<DealerClient>(sessionContext);
-//   // spClient = std::make_shared<SpClient>(sessionContext);
-//   apClient = std::make_shared<ApClient>(sessionContext);
-//   connectStateHandler =
-//       std::make_shared<ConnectStateHandler>(sessionContext, spClient, apClient);
+  connectStateHandler = std::make_shared<ConnectStateHandler>(
+      eventLoop, this->authInfo, spClient);
 
-//   sessionContext->eventLoop->registerHandler(
-//       EventLoop::EventType::DEALER_MESSAGE,
-//       std::bind(&cspot::Session::handleDealerMessage, this,
-//                 std::placeholders::_1));
+  trackPlayer = std::make_shared<TrackPlayer>(eventLoop, spClient, apClient);
 
-//   sessionContext->eventLoop->registerHandler(
-//       EventLoop::EventType::DEALER_REQUEST,
-//       std::bind(&cspot::Session::handleDealerRequest, this,
-//                 std::placeholders::_1));
-// }
+  eventLoop->registerHandler(EventLoop::EventType::DEALER_MESSAGE,
+                             std::bind(&cspot::Session::handleDealerMessage,
+                                       this, std::placeholders::_1));
 
-// void cspot::Session::handleDealerMessage(EventLoop::Event&& event) {
-//   auto dealerMessageEvent = std::move(event);
-//   auto& messageJson = std::get<tao::json::value>(dealerMessageEvent.payload);
+  eventLoop->registerHandler(EventLoop::EventType::DEALER_REQUEST,
+                             std::bind(&cspot::Session::handleDealerRequest,
+                                       this, std::placeholders::_1));
+}
 
-//   auto uri = messageJson.optional<std::string>("uri");
+void cspot::Session::handleDealerMessage(EventLoop::Event&& event) {
+  auto dealerMessageEvent = std::move(event);
+  auto& messageJson = std::get<tao::json::value>(dealerMessageEvent.payload);
 
-//   if (!uri) {
-//     BELL_LOG(info, LOG_TAG, "Received message without URI");
-//     return;
-//   }
+  auto uri = messageJson.optional<std::string>("uri");
 
-//   if (uri->starts_with("hm://pusher/v1/connections")) {
-//     // Extract session ID
-//     auto headers = messageJson.at("headers");
+  if (!uri) {
+    BELL_LOG(info, LOG_TAG, "Received message without URI");
+    return;
+  }
 
-//     auto sessionId = headers.optional<std::string>("Spotify-Connection-Id");
-//     if (!sessionId) {
-//       BELL_LOG(info, LOG_TAG, "Received message without session ID");
-//       return;
-//     }
+  if (uri->starts_with("hm://pusher/v1/connections")) {
+    // Extract session ID
+    auto headers = messageJson.at("headers");
 
-//     sessionContext->sessionId = *sessionId;
-//     BELL_LOG(info, LOG_TAG, "Session ID: {}", *sessionId);
+    auto sessionId = headers.optional<std::string>("Spotify-Connection-Id");
+    if (!sessionId) {
+      BELL_LOG(info, LOG_TAG, "Received message without session ID");
+      return;
+    }
 
-//     // Announce spotify connect state
-//     auto res = connectStateHandler->putState(PutStateReason_NEW_CONNECTION);
-//     if (!res) {
-//       BELL_LOG(error, LOG_TAG, "Failed to announce connect state: {}",
-//                res.error());
-//       return;
-//     }
-//   } else {
-//     BELL_LOG(info, LOG_TAG, "Received message with URI: {}", *uri);
-//   }
-// }
+    authInfo->sessionId = *sessionId;
+    BELL_LOG(info, LOG_TAG, "Session ID: {}", *sessionId);
 
-// void cspot::Session::handleDealerRequest(EventLoop::Event&& event) {
-//   auto dealerRequestEvent = std::move(event);
-//   auto& messageJson = std::get<tao::json::value>(dealerRequestEvent.payload);
+    // Announce spotify connect state
+    auto res = connectStateHandler->putState(PutStateReason_NEW_CONNECTION);
+    if (!res) {
+      BELL_LOG(error, LOG_TAG, "Failed to announce connect state: {}",
+               res.error());
+      return;
+    }
+  } else {
+    BELL_LOG(info, LOG_TAG, "Received message with URI: {}", *uri);
+  }
+}
 
-//   auto messageIdent = messageJson.optional<std::string>("message_ident");
-//   if (!messageIdent) {
-//     BELL_LOG(info, LOG_TAG, "Received message without message_ident");
-//     return;
-//   }
+void cspot::Session::handleDealerRequest(EventLoop::Event&& event) {
+  auto dealerRequestEvent = std::move(event);
+  auto& messageJson = std::get<tao::json::value>(dealerRequestEvent.payload);
 
-//   auto requestKey = messageJson.optional<std::string>("key");
-//   if (!requestKey) {
-//     BELL_LOG(info, LOG_TAG, "Received message without request key");
-//     return;
-//   }
+  auto messageIdent = messageJson.optional<std::string>("message_ident");
+  if (!messageIdent) {
+    BELL_LOG(info, LOG_TAG, "Received message without message_ident");
+    return;
+  }
 
-//   bool requestSuccess = false;
+  auto requestKey = messageJson.optional<std::string>("key");
+  if (!requestKey) {
+    BELL_LOG(info, LOG_TAG, "Received message without request key");
+    return;
+  }
 
-//   if (messageIdent == "hm://connect-state/v1/player/command") {
-//     auto res = connectStateHandler->handlePlayerCommand(messageJson);
-//     if (!res) {
-//       BELL_LOG(error, LOG_TAG, "Failed to handle player command: {}",
-//                res.error());
-//       requestSuccess = false;
-//     } else {
-//       requestSuccess = true;
-//     }
-//   }
+  bool requestSuccess = false;
 
-//   auto replyRes = dealerClient->replyToRequest(requestSuccess, *requestKey);
-//   if (!replyRes) {
-//     BELL_LOG(error, LOG_TAG, "Failed to reply to dealer request: {}",
-//              replyRes.error());
-//   }
-// }
+  if (messageIdent == "hm://connect-state/v1/player/command") {
+    auto res = connectStateHandler->handlePlayerCommand(messageJson);
+    if (!res) {
+      BELL_LOG(error, LOG_TAG, "Failed to handle player command: {}",
+               res.error());
+      requestSuccess = false;
+    } else {
+      requestSuccess = true;
+    }
+  }
 
-// bell::Result<> cspot::Session::start() {
-//   // Start the ap client
-//   auto res = apClient->connectAndAuthenticate();
-//   if (!res) {
-//     BELL_LOG(error, LOG_TAG, "Failed to connect to AP: {}", res.error());
-//     return res;
-//   }
+  auto replyRes = dealerClient->replyToRequest(requestSuccess, *requestKey);
+  if (!replyRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to reply to dealer request: {}",
+             replyRes.error());
+  }
+}
 
-//   // Start the dealer client
-//   res = dealerClient->connect();
-//   if (!res) {
-//     BELL_LOG(error, LOG_TAG, "Failed to connect to dealer client: {}",
-//              res.error());
-//     return res;
-//   }
+bell::Result<> cspot::Session::start() {
 
-//   return {};
-// }
+  auto apAddressRes = credentialsResolver->getApAddress(
+      CredentialsResolver::AddressType::AccessPoint);
+  if (!apAddressRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to resolve ap address: {}",
+             apAddressRes.error());
+    return tl::make_unexpected(apAddressRes.error());
+  }
+
+  // Start the ap client
+  auto res = apClient->connectAndAuthenticate(*apAddressRes, socketPoll);
+  if (!res) {
+    BELL_LOG(error, LOG_TAG, "Failed to connect to AP: {}", res.error());
+    return res;
+  }
+
+  auto dealerAddressRes = credentialsResolver->getApAddress(
+      CredentialsResolver::AddressType::Dealer);
+  if (!dealerAddressRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to resolve dealer address: {}",
+             dealerAddressRes.error());
+    return tl::make_unexpected(dealerAddressRes.error());
+  }
+
+  auto accessKeyRes = credentialsResolver->getAccessKey();
+  if (!accessKeyRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to resolve access key: {}",
+             accessKeyRes.error());
+    return tl::make_unexpected(accessKeyRes.error());
+  }
+  // Start the dealer client
+  auto dealerConnectRes =
+      dealerClient->connect(*dealerAddressRes, *accessKeyRes, socketPoll);
+  if (!dealerConnectRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to connect to dealer client: {}",
+             dealerConnectRes.error());
+    return dealerConnectRes;
+  }
+
+  return {};
+}
+
+void cspot::Session::runPoller() {
+  while (true) {
+    socketPoll->poll(1000);
+    dealerClient->doHousekeeping();
+  }
+}

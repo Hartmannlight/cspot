@@ -10,8 +10,8 @@
 // Mock for SpClient class
 class MockSpClient : public cspot::SpClient {
  public:
-  MAKE_MOCK2(putConnectState,
-             bell::Result<>(cspot_proto::PutStateRequest&, const std::string&),
+  MAKE_MOCK3(putConnectState,
+             bell::Result<>(cspot_proto::PutStateRequest&, const std::string&, const std::string&),
              override);
 
   MAKE_MOCK1(contextResolve,

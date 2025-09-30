@@ -8,8 +8,6 @@
 #include "bell/utils/Task.h"
 
 #include "CDNAudioStream.h"
-#include "SessionContext.h"
-#include "TrackQueue.h"
 #include "api/ApClient.h"
 #include "api/SpClient.h"
 #include "events/EventModels.h"
@@ -18,9 +16,11 @@
 namespace cspot {
 class FileProvider : public bell::Task {
  public:
-  FileProvider(std::shared_ptr<SessionContext> sessionContext,
-               std::shared_ptr<SpClient> spClient,
-               std::shared_ptr<ApClient> apClient);
+  FileProvider(std::shared_ptr<cspot::EventLoop> eventLoop,
+               std::shared_ptr<cspot::SpClient> spClient,
+               std::shared_ptr<cspot::ApClient> apClient);
+
+  ~FileProvider() override;
 
   // Submits a track for providing, will return a ProvidedFile through the event loop
   void provideTrack(const SpotifyId& trackId);
@@ -31,7 +31,7 @@ class FileProvider : public bell::Task {
  private:
   const char* LOG_TAG = "FileProvider";
 
-  std::shared_ptr<SessionContext> sessionContext;
+  std::shared_ptr<EventLoop> eventLoop;
   std::shared_ptr<SpClient> spClient;
   std::shared_ptr<ApClient> apClient;
 

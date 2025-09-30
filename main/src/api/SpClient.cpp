@@ -5,6 +5,7 @@
 #include <sstream>
 
 // Library includes
+#include "Utils.h"
 #include "bell/http/Client.h"
 #include "tao/json.hpp"
 
@@ -22,7 +23,8 @@ class DefaultSpClient : public SpClient {
         credentialsResolver(std::move(credentialsResolver)) {}
 
   bell::Result<> putConnectState(cspot_proto::PutStateRequest& stateRequest,
-                                 const std::string& deviceId) override;
+                                 const std::string& deviceId,
+                                 const std::string& sessionId) override;
   bell::Result<bell::HTTPResponse> contextResolve(
       const std::string& contextUri) override;
   bell::Result<bell::HTTPResponse> contextAutoplayResolve(
@@ -54,7 +56,8 @@ class DefaultSpClient : public SpClient {
 };
 
 bell::Result<> DefaultSpClient::putConnectState(
-    cspot_proto::PutStateRequest& stateRequest, const std::string& deviceId) {
+    cspot_proto::PutStateRequest& stateRequest, const std::string& deviceId,
+    const std::string& sessionId) {
   auto credentialsRes = updateCredentials();
   if (!credentialsRes) {
     // Could not fetch credentials
@@ -69,6 +72,8 @@ bell::Result<> DefaultSpClient::putConnectState(
     return bell::make_unexpected_errc(std::errc::bad_message);
   }
 
+  logDataBase64(freshBuffer.data(), freshBuffer.size());
+
   uint32_t salt = std::rand();
   auto httpResponse = httpClient->put(
       fmt::format("https://{}/connect-state/v1/devices/{}?product=0&salt={}",
@@ -78,7 +83,7 @@ bell::Result<> DefaultSpClient::putConnectState(
               "Content-Type",
               "application/x-protobuf",
           },
-          // {"X-Spotify-Connection-Id", sessionContext->sessionInfo->sessionId},
+          {"X-Spotify-Connection-Id", sessionId},
           {"Authorization", fmt::format("Bearer {}", accessToken)},
       },
       tcb::span(reinterpret_cast<std::byte*>(freshBuffer.data()),
@@ -96,6 +101,8 @@ bell::Result<> DefaultSpClient::putConnectState(
     return bell::make_unexpected_errc(std::errc::bad_message);
   }
 
+  auto bod = httpResponse->bytes();
+  std::cout << "Response body size: " << (bod ? bod->size() : 0) << std::endl;
   return {};
 }
 
@@ -181,7 +188,7 @@ bell::Result<cspot_proto::Track> DefaultSpClient::trackMetadata(
   }
 
   auto response = httpClient->get(
-      fmt::format("https://{}/metadata/4/track/{}", spClientAddress,
+      fmt::format("https://spclient.wg.spotify.com/metadata/4/track/{}",
                   trackId.hexGid()),
       {
           {"Client-Token", clientToken},

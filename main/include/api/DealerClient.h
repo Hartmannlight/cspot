@@ -47,6 +47,9 @@ class DealerClient {
 
   std::shared_ptr<bell::TLSSocket> socket;
 
+  std::chrono::system_clock::time_point lastPingTime;
+  std::chrono::system_clock::time_point lastPongTime;
+
   // Flag used to notify when the connection was established
   bool connectionReady = false;
 

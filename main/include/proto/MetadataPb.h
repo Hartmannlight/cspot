@@ -7,7 +7,7 @@
 
 namespace cspot_proto {
 struct Image {
-  std::vector<uint8_t> fileId;  // Unique identifier for the image file
+  std::vector<std::byte> fileId;  // Unique identifier for the image file
   static auto bindFields(Image* self, bool isDecode) {
     _Image rawProto = Image_init_zero;
     nanopb_helper::bindField(rawProto.file_id, self->fileId, isDecode);

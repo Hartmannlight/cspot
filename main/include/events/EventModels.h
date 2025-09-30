@@ -24,6 +24,14 @@ struct TrackQueueUpdate {
   std::optional<SpotifyId> currentTrackId;
 };
 
+struct PlayerStateUpdate {
+  bool isPlaying;
+  bool isBuffering;
+  int64_t timestamp;
+  int64_t positionAsOfTimestamp;
+  int64_t playbackDurationMs;
+};
+
 struct ProvidedFile {
   SpotifyId itemId{};
   std::optional<cspot_proto::Track> trackMetadata = std::nullopt;

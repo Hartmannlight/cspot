@@ -333,7 +333,6 @@ void bindField(pb_callback_t& pbField, FieldT& field, bool isDecode) {
         pbField.funcs.encode = &pbEncodeVarintList<T>;
     } else if constexpr (std::is_same_v<T, uint8_t>) {
       if (isDecode)
-
         pbField.funcs.decode = &pbDecodeUint8Vector;
       else
         pbField.funcs.encode = &pbEncodeUint8Vector;
@@ -381,21 +380,18 @@ void bindField(pb_callback_t& pbField, FieldT& field, bool isDecode) {
     } else if constexpr (std::is_signed_v<FieldT>) {
       // Catches int32_t, int64_t, etc.
       if (isDecode)
-
         pbField.funcs.decode = &pbDecodeSvarint<FieldT>;
       else
         pbField.funcs.encode = &pbEncodeSvarint<FieldT>;
     } else {
       // Catches uint32_t, uint64_t, etc.
       if (isDecode)
-
         pbField.funcs.decode = &pbDecodeVarint<FieldT>;
       else
         pbField.funcs.encode = &pbEncodeVarint<FieldT>;
     }
   } else if constexpr (std::is_enum_v<FieldT>) {
     if (isDecode)
-
       pbField.funcs.decode = &pbDecodeVarint<FieldT>;
     else
       pbField.funcs.encode = &pbEncodeVarint<FieldT>;

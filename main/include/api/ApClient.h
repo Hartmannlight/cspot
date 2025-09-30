@@ -2,16 +2,20 @@
 
 #include <unordered_map>
 #include <utility>
-#include "SessionContext.h"
+#include "AuthInfo.h"
 #include "api/ApConnection.h"
+#include "events/EventLoop.h"
 #include "proto/SpotifyId.h"
 
 namespace cspot {
 class ApClient {
  public:
-  ApClient(std::shared_ptr<SessionContext> sessionContext);
+  ApClient(std::shared_ptr<cspot::EventLoop> eventLoop,
+           std::shared_ptr<cspot::AuthInfo> authInfo);
 
-  bell::Result<> connectAndAuthenticate();
+  bell::Result<> connectAndAuthenticate(
+      const std::string& apAddress,
+      const std::shared_ptr<bell::SocketPollListener>& socketPoll);
 
   bell::Result<> requestAudioKey(const SpotifyId& trackId,
                                  const std::vector<std::byte>& fileId);
@@ -21,7 +25,8 @@ class ApClient {
  private:
   const char* LOG_TAG = "ApClient";
 
-  std::shared_ptr<SessionContext> sessionContext;
+  std::shared_ptr<cspot::EventLoop> eventLoop;
+  std::shared_ptr<cspot::AuthInfo> authInfo;
   std::unique_ptr<ApConnection> apConnection;
 
   uint32_t audioKeySequence = 0;

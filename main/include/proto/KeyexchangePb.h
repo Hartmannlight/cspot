@@ -14,8 +14,8 @@ struct LoginCryptoDiffieHellmanHello {
     _LoginCryptoDiffieHellmanHello rawProto =
         LoginCryptoDiffieHellmanHello_init_zero;
     nanopb_helper::bindField(rawProto.gc, self->gc, isDecode);
-    nanopb_helper::bindField(rawProto.server_keys_known,
-                                   self->serverKeysKnown, isDecode);
+    nanopb_helper::bindField(rawProto.server_keys_known, self->serverKeysKnown,
+                             isDecode);
     return rawProto;
   }
 };
@@ -224,7 +224,7 @@ struct ClientHello {
     nanopb_helper::bindField(rawProto.login_crypto_hello,
                              self->loginCryptoHello, isDecode);
     nanopb_helper::bindField(rawProto.cryptosuites_supported,
-                                       self->cryptosuitesSupported, isDecode);
+                             self->cryptosuitesSupported, isDecode);
     nanopb_helper::bindField(rawProto.padding, self->padding, isDecode);
     nanopb_helper::bindField(rawProto.feature_set, self->featureSet, isDecode);
     nanopb_helper::bindField(rawProto.client_nonce, self->clientNonce,

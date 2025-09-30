@@ -1,5 +1,6 @@
 #include "api/ApConnection.h"
 
+#include "Utils.h"
 #include "authentication.pb.h"
 #include "bell/Logger.h"
 #include "bell/Result.h"
@@ -13,6 +14,9 @@ namespace {
 const long long SPOTIFY_VERSION = 0x10800000000;
 const size_t shannonMacSize = 4;
 }  // namespace
+
+ApConnection::ApConnection(const std::shared_ptr<cspot::AuthInfo>& authInfo)
+    : authInfo(authInfo) {}
 
 bell::Result<> ApConnection::connect(
     const std::string& apAddress,
@@ -120,13 +124,21 @@ void ApConnection::handleRead() {
     BELL_LOG(info, LOG_TAG, "Hello challenge solved successfully");
     state = State::CONNECTED_SHANNON;
 
-    // res = authenticate();
-    // if (!res) {
-    //   BELL_LOG(error, LOG_TAG, "Could not authenticate with AP: {}",
-    //            res.error());
-    //   state = State::ERROR;
-    //   return;
-    // }
+    if (authInfo->loginCredentials) {
+      res = authenticate(*authInfo->loginCredentials, authInfo->deviceId);
+
+      if (!res) {
+        BELL_LOG(error, LOG_TAG, "Could not authenticate with AP: {}",
+                 res.error());
+        state = State::ERROR;
+        return;
+      }
+    } else {
+      BELL_LOG(error, LOG_TAG,
+               "No login credentials available for authentication");
+      state = State::ERROR;
+      return;
+    }
   }
 }
 
@@ -377,9 +389,14 @@ bell::Result<size_t> ApConnection::receivePlainPacket() {
   // Already read the packet size, so subtract it from the total size
   packetSize -= 4;
 
-  res = apSock->read(connectionBuffer.data(), packetSize);
-  if (!res) {
-    return res;
+  size_t readBytes = 0;
+
+  while (readBytes != packetSize) {
+    res = apSock->read(&connectionBuffer[readBytes], packetSize - readBytes);
+    if (!res) {
+      return tl::make_unexpected(res.error());
+    }
+    readBytes += *res;
   }
 
   if (state != State::CONNECTED_SHANNON) {
@@ -476,10 +493,14 @@ bell::Result<std::byte*> ApConnection::receivePacket(uint8_t& cmd,
     connectionBuffer.resize(packetSize + shannonMacSize);
   }
 
-  // Read the packet data + 4 byte mac
-  res = apSock->read(connectionBuffer.data(), packetSize + shannonMacSize);
-  if (!res) {
-    return tl::make_unexpected(res.error());
+  size_t readBytes = 0;
+  while (readBytes != packetSize + shannonMacSize) {
+    res = apSock->read(&connectionBuffer[readBytes],
+                       packetSize + shannonMacSize - readBytes);
+    if (!res) {
+      return tl::make_unexpected(res.error());
+    }
+    readBytes += *res;
   }
 
   // Decrypt the packet
@@ -492,6 +513,15 @@ bell::Result<std::byte*> ApConnection::receivePacket(uint8_t& cmd,
   // Compare the received mac with the calculated mac
   if (std::memcmp(mac.data(), &connectionBuffer[packetSize], shannonMacSize) !=
       0) {
+    BELL_LOG(error, LOG_TAG, "MAC mismatch in the received packet");
+    for (auto& byte : mac) {
+      std::cout << std::hex << static_cast<int>(byte) << ", ";
+    }
+    for (size_t i = 0; i < shannonMacSize; i++) {
+      std::cout << std::hex
+                << static_cast<int>(connectionBuffer[packetSize + i]) << ", ";
+    }
+    std::cout << std::dec << std::endl;
     throw std::runtime_error("MAC mismatch in the received packet");
   }
 

@@ -5,16 +5,20 @@
 
 #include <tao/json.hpp>
 #include "SessionContext.h"
-#include "TrackQueue.h"
 #include "Utils.h"
 #include "api/SpClient.h"
 #include "bell/Logger.h"
 #include "bell/Result.h"
 #include "connect.pb.h"
 #include "events/EventLoop.h"
+#include "events/EventModels.h"
 #include "mbedtls/base64.h"
 #include "metadata.pb.h"
+#include "pb.h"
 #include "proto/SpotifyId.h"
+#include "tao/json/to_string.hpp"
+#include "tl/expected.hpp"
+#include "tracks/TrackQueueHandler.h"
 
 using namespace cspot;
 
@@ -43,23 +47,29 @@ std::string generateSessionId() {
 };  // namespace
 
 ConnectStateHandler::ConnectStateHandler(
-    std::shared_ptr<SessionContext> sessionContext,
-    std::shared_ptr<SpClient> spClient, std::shared_ptr<ApClient> apClient)
-    : sessionContext(std::move(sessionContext)),
-      spClient(std::move(spClient)),
-      apClient(std::move(apClient)) {
-  trackQueue =
-      std::make_shared<TrackQueue>(this->sessionContext, this->spClient);
+    std::shared_ptr<cspot::EventLoop> eventLoop,
+    std::shared_ptr<AuthInfo> authInfo, std::shared_ptr<SpClient> spClient)
+    : eventLoop(std::move(eventLoop)),
+      authInfo(std::move(authInfo)),
+      spClient(std::move(spClient)) {
+  trackQueueHandler =
+      createDefaultTrackQueueHandler(this->spClient, this->eventLoop);
 
-  // this->sessionContext->eventLoop->registerHandler(
-  //     EventLoop::EventType::CURRENT_TRACK_METADATA,
-  //     [this](cspot::EventLoop::Event&& event) {
-  //       auto& currentTrackMetadata =
-  //           std::get<cspot::CurrentTrackMetadata>(event.payload);
+  this->eventLoop->registerHandler(
+      EventLoop::EventType::PLAYER_STATE_UPDATED,
+      [this](cspot::EventLoop::Event&& event) {
+        auto& playerStateUpdate =
+            std::get<cspot::PlayerStateUpdate>(event.payload);
 
-  //       auto& playerState = putStateRequestProto.device.playerState;
-  //       playerState.duration = currentTrackMetadata.durationMs;
-  //     });
+        auto& playerState = putStateRequestProto.device.playerState;
+        playerState.duration = playerStateUpdate.playbackDurationMs;
+        playerState.position = playerStateUpdate.positionAsOfTimestamp;
+        playerState.isPlaying = playerStateUpdate.isPlaying;
+        playerState.isBuffering = playerStateUpdate.isBuffering;
+        playerState.timestamp = playerStateUpdate.timestamp;
+
+        (void)putState();
+      });
 
   // this->sessionContext->eventLoop->registerHandler(
   //     EventLoop::EventType::TRACKPROVIDER_UPDATED,
@@ -92,11 +102,11 @@ void ConnectStateHandler::initialize() {
   auto& deviceInfo = deviceProto.deviceInfo;
   deviceInfo.canPlay = true;
   deviceInfo.volume = 100;
-  // deviceInfo.name = sessionContext->sessionInfo->getDeviceName();
+  deviceInfo.name = authInfo->deviceName;
 
   deviceInfo.deviceType = DeviceType_SPEAKER;
   deviceInfo.deviceSoftwareVersion = deviceSoftwareVersion;
-  // deviceInfo.deviceId = sessionContext->loginBlob->getDeviceId();
+  deviceInfo.deviceId = authInfo->deviceId;
   deviceInfo.clientId = clientId;
   deviceInfo.spircVersion = spircVersion;
 
@@ -132,14 +142,15 @@ void ConnectStateHandler::initialize() {
   playerState.isSystemInitiated = true;
 
   // Assign next and previous tracks encode callbacks
-  playerState.nextTracks.funcs.encode = TrackQueue::pbEncodeNextTracks;
-  playerState.prevTracks.funcs.encode = TrackQueue::pbEncodePreviousTracks;
-  playerState.nextTracks.arg = trackQueue.get();
-  playerState.prevTracks.arg = trackQueue.get();
+  playerState.nextTracks.funcs.encode = pbEncodeNextTracks;
+  playerState.prevTracks.funcs.encode = pbEncodePreviousTracks;
+  playerState.nextTracks.arg = this;
+  playerState.prevTracks.arg = this;
 }
 
 bell::Result<> ConnectStateHandler::handlePlayerCommand(
     tao::json::value& messageJson) {
+  std::cout << tao::json::to_string(messageJson) << std::endl;
   auto& payload = messageJson.at("payload");
   auto& command = payload.at("command");
   std::string endpoint = command.at("endpoint").get_string();
@@ -160,6 +171,9 @@ bell::Result<> ConnectStateHandler::handlePlayerCommand(
   } else if (endpoint == "skip_prev") {
     BELL_LOG(info, LOG_TAG, "Received skip_prev command");
     return handleSkipPrevCommand();
+  } else if (endpoint == "play") {
+    BELL_LOG(info, LOG_TAG, "Received play command");
+    return handlePlayCommand(command);
   } else {
     BELL_LOG(info, LOG_TAG, "Received unknown command: {}", endpoint);
     return bell::make_unexpected_errc(std::errc::operation_not_supported);
@@ -177,35 +191,14 @@ bell::Result<> ConnectStateHandler::putState(PutStateReason reason) {
   putStateRequestProto.memberType = MemberType_CONNECT_STATE;
   putStateRequestProto.putStateReason = reason;
 
-  return this->spClient->putConnectState(putStateRequestProto, "");
+  return this->spClient->putConnectState(
+      putStateRequestProto, authInfo->deviceId, authInfo->sessionId);
   return {};
 }
 
 bell::Result<> ConnectStateHandler::handleTransferCommand(
     std::string_view payloadDataStr, const tao::json::value& options) {
-  size_t olen = 0;
-
-  // Get the size of the base64 decoded data
-  auto base64DecodeRes = mbedtls_base64_decode(
-      nullptr, 0, &olen,
-      reinterpret_cast<const uint8_t*>(payloadDataStr.data()),
-      payloadDataStr.size());
-  if (base64DecodeRes == 0) {
-    BELL_LOG(error, LOG_TAG, "Failed to base64 decode payload data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-
-  std::vector<std::byte> decodedData(olen);
-  // Decode the base64 data
-  base64DecodeRes = mbedtls_base64_decode(
-      reinterpret_cast<uint8_t*>(decodedData.data()), decodedData.size(), &olen,
-      reinterpret_cast<const uint8_t*>(payloadDataStr.data()),
-      payloadDataStr.size());
-  if (base64DecodeRes != 0) {
-    BELL_LOG(error, LOG_TAG, "Failed to base64 decode payload data");
-    return bell::make_unexpected_errc(std::errc::bad_message);
-  }
-
+  auto decodedData = base64Decode(payloadDataStr);
   cspot_proto::TransferState transferState;
 
   bool res = nanopb_helper::decodeFromVector(transferState, decodedData);
@@ -230,8 +223,8 @@ bell::Result<> ConnectStateHandler::handleTransferCommand(
   }
 
   // No playback yet
-  playerState.isPlaying = true;
-  playerState.isBuffering = false;
+  playerState.isPlaying = false;
+  playerState.isBuffering = true;
   playerState.timestamp = transferState.playback.timestamp;
 
   bool shouldPause =
@@ -246,57 +239,159 @@ bell::Result<> ConnectStateHandler::handleTransferCommand(
   playerState.position = 0;
   playerState.positionAsOfTimestamp =
       transferState.playback.positionAsOfTimestamp;
-  putStateRequestProto.startedPlayingAt = transferState.playback.timestamp;
+  putStateRequestProto.startedPlayingAt =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
   putStateRequestProto.hasBeenPlayingForMs = 0;
-
-  trackQueue->setQueue(transferState.queue);
 
   SpotifyIdType trackType =
       SpotifyId::getTypeFromContext(transferState.current_session.context.uri);
   SpotifyId trackId =
       SpotifyId(trackType, transferState.playback.currentTrack.gid);
 
-  auto provideRes = trackQueue->loadTrackAndContext(
-      transferState.current_session.currentUid, trackId.uri,
-      transferState.current_session.context);
-  if (!provideRes) {
-    BELL_LOG(error, LOG_TAG, "Failed to provide current track: {}",
-             provideRes.error());
-    return provideRes;
+  auto loadRes = trackQueueHandler->loadContext(
+      transferState.current_session.context.uri, trackId.uri,
+      transferState.current_session.currentUid);
+  if (!loadRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to load context: {}", loadRes.error());
+    return tl::make_unexpected(loadRes.error());
   }
 
-  auto track = trackQueue->currentTrack();
+  trackQueueHandler->setQueue(transferState.queue.tracks);
+  trackQueueHandler->setPlayingQueue(transferState.queue.isPlayingQueue);
+
+  trackQueueHandler->updateTrackWindows();
+
+  auto track = trackQueueHandler->currentTrack();
   if (track) {
     playerState.track = *track;
-    playerState.index.hasValue = true;
-    playerState.index.value = trackQueue->currentContextIndex().value();
-  } else {
-    playerState.index.hasValue = false;
   }
 
+  auto contextIndex = trackQueueHandler->currentContextIndex();
+  playerState.index.hasValue = contextIndex.has_value();
+  if (contextIndex) {
+    playerState.index.value = *contextIndex;
+  }
+
+  playerState.duration = 0;
+
+  std::cout << "Current track after transfer: " << (track ? track->uri : "none")
+            << std::endl;
   if (!putState()) {
     BELL_LOG(error, LOG_TAG, "Failed to put state");
     return {};
+  }
+  trackQueueHandler->updateTrackWindows();
+
+  return {};
+}
+
+bell::Result<> ConnectStateHandler::handlePlayCommand(
+    const tao::json::value& command) {
+  // TODO: Handle overrides
+  const tao::json::value& context = command.at("context");
+  const tao::json::value& options = command.at("options");
+  const tao::json::value& skipTo = options.at("skip_to");
+  auto contextUri = context.optional<std::string>("uri");
+  auto skipToUid = skipTo.optional<std::string>("track_uid");
+  auto skipToUri = skipTo.optional<std::string>("track_uri");
+
+  if (!contextUri) {
+    BELL_LOG(error, LOG_TAG, "Play command missing context URI");
+    return bell::make_unexpected_errc(std::errc::bad_message);
+  }
+
+  auto loadRes =
+      trackQueueHandler->loadContext(*contextUri, skipToUri, skipToUid);
+  if (!loadRes) {
+    return tl::make_unexpected(loadRes.error());
+  }
+
+  trackQueueHandler->updateTrackWindows();
+
+  auto& playerState = putStateRequestProto.device.playerState;
+  auto track = trackQueueHandler->currentTrack();
+  if (track) {
+    playerState.track = *track;
+  }
+
+  auto contextIndex = trackQueueHandler->currentContextIndex();
+  playerState.index.hasValue = contextIndex.has_value();
+  if (contextIndex) {
+    playerState.index.value = *contextIndex;
+  }
+
+  playerState.positionAsOfTimestamp = 0;
+  playerState.timestamp =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
+
+  auto putRes = putState();
+  if (!putRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to put state after skip next");
+    return putRes;
   }
 
   return {};
 }
 
 bell::Result<> ConnectStateHandler::handleSkipNextCommand() {
-  auto res = trackQueue->skipToNextTrack();
+  auto res = trackQueueHandler->skipToNextTrack();
   if (!res) {
     BELL_LOG(error, LOG_TAG, "Failed to skip next track");
     return res;
   }
 
+  trackQueueHandler->updateTrackWindows();
+
   auto& playerState = putStateRequestProto.device.playerState;
-  auto track = trackQueue->currentTrack();
+  auto track = trackQueueHandler->currentTrack();
   if (track) {
     playerState.track = *track;
-    playerState.index.hasValue = true;
-    playerState.index.value = trackQueue->currentContextIndex().value();
-  } else {
-    playerState.index.hasValue = false;
+  }
+
+  auto contextIndex = trackQueueHandler->currentContextIndex();
+  playerState.index.hasValue = contextIndex.has_value();
+  if (contextIndex) {
+    playerState.index.value = *contextIndex;
+  }
+
+  playerState.positionAsOfTimestamp = 0;
+  playerState.timestamp =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
+
+  auto putRes = putState();
+  if (!putRes) {
+    BELL_LOG(error, LOG_TAG, "Failed to put state after skip next");
+    return putRes;
+  }
+
+  return {};
+}
+
+bell::Result<> ConnectStateHandler::handleSkipPrevCommand() {
+  auto res = trackQueueHandler->skipToPreviousTrack();
+  if (!res) {
+    BELL_LOG(error, LOG_TAG, "Failed to skip previous track");
+    return res;
+  }
+
+  trackQueueHandler->updateTrackWindows();
+
+  auto& playerState = putStateRequestProto.device.playerState;
+  auto track = trackQueueHandler->currentTrack();
+  if (track) {
+    playerState.track = *track;
+  }
+
+  auto contextIndex = trackQueueHandler->currentContextIndex();
+  playerState.index.hasValue = contextIndex.has_value();
+  if (contextIndex) {
+    playerState.index.value = *contextIndex;
   }
 
   playerState.positionAsOfTimestamp = 0;
@@ -310,33 +405,20 @@ bell::Result<> ConnectStateHandler::handleSkipNextCommand() {
   return {};
 }
 
-bell::Result<> ConnectStateHandler::handleSkipPrevCommand() {
-  auto res = trackQueue->skipToPreviousTrack();
-  if (!res) {
-    BELL_LOG(error, LOG_TAG, "Failed to skip next track");
-    return res;
+bool ConnectStateHandler::encodeProtoTracks(pb_ostream_t* stream,
+                                            const pb_field_t* field,
+                                            bool previous) {
+  auto tracks = previous ? trackQueueHandler->previousTracks()
+                         : trackQueueHandler->nextTracks();
+  for (auto& track : tracks) {
+    if (track.uri.empty())
+      break;
+    void* trackPtr = &track;
+    if (!nanopb_helper::StructCodec<
+            cspot_proto::ProvidedTrack>::encodeSubmessage(stream, field,
+                                                          &trackPtr)) {
+      return false;
+    }
   }
-
-  auto& playerState = putStateRequestProto.device.playerState;
-  auto track = trackQueue->currentTrack();
-  if (track) {
-    playerState.track = *track;
-    playerState.index.hasValue = true;
-    playerState.index.value = trackQueue->currentContextIndex().value();
-  } else {
-    playerState.index.hasValue = false;
-  }
-
-  playerState.positionAsOfTimestamp = 0;
-  playerState.timestamp =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count();
-
-  if (!putState()) {
-    BELL_LOG(error, LOG_TAG, "Failed to put state");
-    return {};
-  }
-
-  return {};
+  return true;
 }

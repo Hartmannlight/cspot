@@ -14,8 +14,7 @@ struct SystemInfo {
 
   static auto bindFields(SystemInfo* self, bool isDecode) {
     _SystemInfo rawProto = SystemInfo_init_zero;
-    nanopb_helper::bindField(rawProto.cpu_family, self->cpuFamily,
-                                   isDecode);
+    nanopb_helper::bindField(rawProto.cpu_family, self->cpuFamily, isDecode);
     nanopb_helper::bindField(rawProto.os, self->os, isDecode);
     nanopb_helper::bindField(rawProto.system_information_string,
                              self->systemInformationString, isDecode);

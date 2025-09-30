@@ -26,8 +26,8 @@ class SpClient {
    * @brief Makes an /connect-state/ PUT request, used to publish spotify device state
    */
   virtual bell::Result<> putConnectState(
-      cspot_proto::PutStateRequest& stateRequest,
-      const std::string& deviceId) = 0;
+      cspot_proto::PutStateRequest& stateRequest, const std::string& deviceId,
+      const std::string& sessionId) = 0;
 
   virtual bell::Result<bell::HTTPResponse> contextResolve(
       const std::string& contextUri) = 0;

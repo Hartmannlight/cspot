@@ -10,6 +10,11 @@
 
 using namespace cspot;
 
+namespace {
+const auto pingInterval = std::chrono::seconds(30);
+// const auto pongTimeout = std::chrono::seconds(10);
+}  // namespace
+
 DealerClient::DealerClient(std::shared_ptr<cspot::EventLoop> eventLoop)
     : eventLoop(std::move(eventLoop)) {
   // Bind websocket client handlers
@@ -165,6 +170,9 @@ void DealerClient::onWSMessage(websocketpp::connection_hdl conn,
       eventLoop->post(EventLoop::EventType::DEALER_MESSAGE, jsonMessage);
     } else if (type == "request") {
       eventLoop->post(EventLoop::EventType::DEALER_REQUEST, jsonMessage);
+    } else if (type == "pong") {
+      lastPongTime = std::chrono::system_clock::now();
+      BELL_LOG(debug, LOG_TAG, "Received pong");
     } else {
       BELL_LOG(debug, LOG_TAG, "Unknown message type: {}", type);
     }
@@ -193,5 +201,20 @@ bell::Result<> DealerClient::replyToRequest(bool success,
 }
 
 void DealerClient::doHousekeeping() {
-  // TODO:
+  if (std::chrono::system_clock::now() >= (lastPingTime + pingInterval)) {
+    std::scoped_lock lock(accessMutex);
+
+    if (wsConnection && connectionReady) {
+      tao::json::value pingMsg = {{"type", "ping"}};
+      std::string responseStr = tao::json::to_string(pingMsg);
+      auto err =
+          wsConnection->send(responseStr, websocketpp::frame::opcode::TEXT);
+
+      if (err) {
+        BELL_LOG(error, LOG_TAG, "Error sending response: {}", err.message());
+      } else {
+        lastPingTime = std::chrono::system_clock::now();
+      }
+    }
+  }
 }

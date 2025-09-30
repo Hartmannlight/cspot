@@ -27,6 +27,7 @@ TEST_CASE("SpClientTests tests") {
     const std::string accessKeyMock = "accessKeyMock";
     const std::string spAddressMock = "spclient.spotify.com";
     const std::string mockDeviceId = "deviceid123";
+    const std::string mockSessionId = "session321";
 
     SUBCASE(
         "should fetch credentials from credentials resolver and hit a correct "
@@ -42,10 +43,12 @@ TEST_CASE("SpClientTests tests") {
 
       REQUIRE_CALL(*rawMockTransport, execute(_))
           .WITH(_1.method == bell::HTTPMethod::PUT)
-          .WITH(_1.uri.path == fmt::format("/connect-state/v1/devices/{}", mockDeviceId))
+          .WITH(_1.uri.path ==
+                fmt::format("/connect-state/v1/devices/{}", mockDeviceId))
           .RETURN(createMockResponseString(200, "unused", "application/json"));
       cspot_proto::PutStateRequest putStateReq = {};
-      CHECK(spClient->putConnectState(putStateReq, mockDeviceId));
+      CHECK(
+          spClient->putConnectState(putStateReq, mockDeviceId, mockSessionId));
     }
   }
 
