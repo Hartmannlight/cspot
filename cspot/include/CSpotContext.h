@@ -29,6 +29,8 @@ struct Context {
 
     std::string username;
     std::string countryCode;
+    std::string clientId;
+    std::string clientSecret;
   };
 
   ConfigState config;

@@ -8,6 +8,7 @@
 
 #include "AccessKeyFetcher.h"
 #include "BellTask.h"
+#include "BellUtils.h"
 #include "CDNAudioFile.h"
 #include "CSpotContext.h"
 #include "HTTPClient.h"
@@ -278,38 +279,58 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
   // Request CDN URL
   CSPOT_LOG(info, "Received access key, fetching CDN URL...");
 
-  try {
+  // Retry up to 5 times to handle transient 429 rate limits
+  for (int attempt = 0; attempt < 5; attempt++) {
+    try {
+      std::string requestUrl = string_format(
+          "https://api.spotify.com/v1/storage-resolve/files/audio/interactive"
+          "/%s?alt=json&product=9",
+          bytesToHexString(fileId).c_str());
 
-    std::string requestUrl = string_format(
-        "https://api.spotify.com/v1/storage-resolve/files/audio/interactive/"
-        "%s?alt=json&product=9",
-        bytesToHexString(fileId).c_str());
+      auto req = bell::HTTPClient::get(
+          requestUrl, {bell::HTTPClient::ValueHeader(
+                          {"Authorization", "Bearer " + accessKey})});
 
-    auto req = bell::HTTPClient::get(
-        requestUrl, {bell::HTTPClient::ValueHeader(
-                        {"Authorization", "Bearer " + accessKey})});
+      int sc = req->statusCode();
+      std::string_view result = req->body();
 
-    // Wait for response
-    std::string_view result = req->body();
+      if (sc == 429) {
+        CSPOT_LOG(info, "CDN URL rate limited (429), retry %d/5 in 5s", attempt + 1);
+        BELL_SLEEP_MS(5000);
+        continue;
+      }
+      if (sc != 200) {
+        throw std::runtime_error("CDN URL HTTP error " + std::to_string(sc));
+      }
 
 #ifdef BELL_ONLY_CJSON
-    cJSON* jsonResult = cJSON_Parse(result.data());
-    cdnUrl = cJSON_GetArrayItem(cJSON_GetObjectItem(jsonResult, "cdnurl"), 0)
-                 ->valuestring;
-    cJSON_Delete(jsonResult);
+      cJSON* jsonResult = cJSON_Parse(result.data());
+      cJSON* cdnurlArr = cJSON_GetObjectItem(jsonResult, "cdnurl");
+      if (!cdnurlArr || cJSON_GetArraySize(cdnurlArr) == 0)
+        throw std::runtime_error("cdnurl missing in response");
+      cdnUrl = cJSON_GetArrayItem(cdnurlArr, 0)->valuestring;
+      cJSON_Delete(jsonResult);
 #else
-    auto jsonResult = nlohmann::json::parse(result);
-    cdnUrl = jsonResult["cdnurl"][0];
+      auto jsonResult = nlohmann::json::parse(result);
+      if (!jsonResult.contains("cdnurl") || jsonResult["cdnurl"].empty())
+        throw std::runtime_error("cdnurl missing in response");
+      cdnUrl = jsonResult["cdnurl"][0];
 #endif
 
-    CSPOT_LOG(info, "Received CDN URL, %s", cdnUrl.c_str());
-    state = State::READY;
-    loadedSemaphore->give();
-  } catch (...) {
-    CSPOT_LOG(error, "Cannot fetch CDN URL");
-    state = State::FAILED;
-    loadedSemaphore->give();
+      CSPOT_LOG(info, "Received CDN URL, %s", cdnUrl.c_str());
+      state = State::READY;
+      loadedSemaphore->give();
+      return;
+    } catch (std::exception& e) {
+      CSPOT_LOG(error, "Cannot fetch CDN URL (attempt %d): %s", attempt + 1, e.what());
+    } catch (...) {
+      CSPOT_LOG(error, "Cannot fetch CDN URL (attempt %d): unknown", attempt + 1);
+    }
+    if (attempt < 4) BELL_SLEEP_MS(2000);
   }
+
+  state = State::FAILED;
+  loadedSemaphore->give();
 }
 
 void QueuedTrack::expire() {

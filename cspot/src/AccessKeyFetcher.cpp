@@ -11,11 +11,8 @@
 #include "HTTPClient.h"
 #include "Logger.h"            // for CSPOT_LOG
 #include "MercurySession.h"    // for MercurySession, MercurySession::Res...
-#include "NanoPBExtensions.h"  // for bell::nanopb::encode...
-#include "NanoPBHelper.h"      // for pbEncode and pbDecode
-#include "Packet.h"            // for cspot
-#include "TimeProvider.h"      // for TimeProvider
-#include "Utils.h"             // for string_format
+#include "TimeProvider.h"
+#include "Utils.h"
 
 #ifdef BELL_ONLY_CJSON
 #include "cJSON.h"
@@ -24,16 +21,11 @@
 #include "nlohmann/json_fwd.hpp"  // for json
 #endif
 
-#include "protobuf/login5.pb.h"  // for LoginRequest
 
 using namespace cspot;
 
-static std::string CLIENT_ID =
-    "65b708073fc0480ea92a077233ca87bd";  // Spotify web client's client id
-
-static std::string SCOPES =
-    "streaming,user-library-read,user-library-modify,user-top-read,user-read-"
-    "recently-played";  // Required access scopes
+// Client ID and secret are set via ctx->config.clientId / clientSecret
+// (registered Spotify app — never hardcode here)
 
 AccessKeyFetcher::AccessKeyFetcher(std::shared_ptr<cspot::Context> ctx)
     : ctx(ctx) {}
@@ -62,78 +54,49 @@ std::string AccessKeyFetcher::getAccessKey() {
 
 void AccessKeyFetcher::updateAccessKey() {
   if (keyPending) {
-    // Already pending refresh request
     return;
   }
-
   keyPending = true;
 
-  // Prepare a protobuf login request
-  static LoginRequest loginRequest = LoginRequest_init_zero;
-  static LoginResponse loginResponse = LoginResponse_init_zero;
+  std::string body = "grant_type=client_credentials"
+                     "&client_id=" + ctx->config.clientId +
+                     "&client_secret=" + ctx->config.clientSecret;
 
-  // Assign necessary request fields
-  loginRequest.client_info.client_id.funcs.encode = &bell::nanopb::encodeString;
-  loginRequest.client_info.client_id.arg = &CLIENT_ID;
+  CSPOT_LOG(info, "Fetching access token via client credentials...");
 
-  loginRequest.client_info.device_id.funcs.encode = &bell::nanopb::encodeString;
-  loginRequest.client_info.device_id.arg = &ctx->config.deviceId;
+  auto response = bell::HTTPClient::post(
+      "https://accounts.spotify.com/api/token",
+      {{"Content-Type", "application/x-www-form-urlencoded"}},
+      std::vector<uint8_t>(body.begin(), body.end()));
 
-  loginRequest.login_method.stored_credential.username.funcs.encode =
-      &bell::nanopb::encodeString;
-  loginRequest.login_method.stored_credential.username.arg =
-      &ctx->config.username;
+  auto result = response->body();
 
-  // Set login method to stored credential
-  loginRequest.which_login_method = LoginRequest_stored_credential_tag;
-  loginRequest.login_method.stored_credential.data.funcs.encode =
-      &bell::nanopb::encodeVector;
-  loginRequest.login_method.stored_credential.data.arg = &ctx->config.authData;
-
-  // Max retry of 3, can receive different hash cat types
-  int retryCount = 3;
-  bool success = false;
-
-  do {
-    auto encodedRequest = pbEncode(LoginRequest_fields, &loginRequest);
-    CSPOT_LOG(info, "Access token expired, fetching new one... %d",
-              encodedRequest.size());
-
-    // Perform a login5 request, containing the encoded protobuf data
-    auto response = bell::HTTPClient::post(
-        "https://login5.spotify.com/v3/login",
-        {{"Content-Type", "application/x-protobuf"}}, encodedRequest);
-
-    auto responseBytes = response->bytes();
-
-    // Deserialize the response
-    pbDecode(loginResponse, LoginResponse_fields, responseBytes);
-
-    if (loginResponse.which_response == LoginResponse_ok_tag) {
-      // Successfully received an auth token
-      CSPOT_LOG(info, "Access token sucessfully fetched");
-      success = true;
-
-      accessKey = std::string(loginResponse.response.ok.access_token);
-
-      // Expire in ~30 minutes
-      int expiresIn = 3600 / 2;
-
-      if (loginResponse.response.ok.has_access_token_expires_in) {
-        int expiresIn = loginResponse.response.ok.access_token_expires_in / 2;
-      }
-
-      this->expiresAt =
-          ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
+#ifdef BELL_ONLY_CJSON
+  cJSON* json = cJSON_Parse(result.data());
+  if (json) {
+    cJSON* token = cJSON_GetObjectItem(json, "access_token");
+    cJSON* expires = cJSON_GetObjectItem(json, "expires_in");
+    if (token && token->valuestring) {
+      accessKey = token->valuestring;
+      int expiresIn = expires ? expires->valueint / 2 : 1800;
+      this->expiresAt = ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000LL);
+      CSPOT_LOG(info, "Access token fetched successfully");
     } else {
-      CSPOT_LOG(error, "Failed to fetch access token");
+      CSPOT_LOG(error, "No access_token in response");
     }
-
-    // Free up allocated memory for response
-    pb_release(LoginResponse_fields, &loginResponse);
-
-    retryCount--;
-  } while (retryCount >= 0 && !success);
+    cJSON_Delete(json);
+  }
+#else
+  auto json = nlohmann::json::parse(result, nullptr, false);
+  if (!json.is_discarded() && json.contains("access_token")) {
+    accessKey = json["access_token"];
+    int expiresIn = json.value("expires_in", 3600) / 2;
+    this->expiresAt = ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000LL);
+    CSPOT_LOG(info, "Access token fetched successfully");
+  } else {
+    CSPOT_LOG(error, "Failed to fetch access token");
+  }
+#endif
 
   keyPending = false;
 }

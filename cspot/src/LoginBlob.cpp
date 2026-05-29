@@ -54,9 +54,9 @@ std::vector<uint8_t> LoginBlob::decodeBlob(
 
   auto mac = crypto->sha1HMAC(checksumKey, encrypted);
 
-  // Check checksum
   if (mac != checksum) {
     CSPOT_LOG(error, "Mac doesn't match!");
+    return {};   // abort — don't process garbage data
   }
 
   encryptionKey =
@@ -101,8 +101,11 @@ std::vector<uint8_t> LoginBlob::decodeBlobSecondary(
 
   auto l = blobData.size();
 
-  for (int i = 0; i < l - 16; i++) {
-    blobData[l - i - 1] ^= blobData[l - i - 17];
+  // Guard: unsigned underflow if l < 16 (corrupted blob) → skip loop
+  if (l >= 16) {
+    for (size_t i = 0; i < l - 16; i++) {
+      blobData[l - i - 1] ^= blobData[l - i - 17];
+    }
   }
 
   return blobData;
@@ -114,7 +117,15 @@ void LoginBlob::loadZeroconf(const std::vector<uint8_t>& blob,
                              const std::string& username) {
 
   auto partDecoded = this->decodeBlob(blob, sharedKey);
+  if (partDecoded.empty()) {
+    CSPOT_LOG(error, "decodeBlob returned empty — aborting");
+    return;
+  }
   auto loginData = this->decodeBlobSecondary(partDecoded, username, deviceId);
+  if (loginData.size() < 4) {
+    CSPOT_LOG(error, "loginData too small — blob secondary decode failed");
+    return;
+  }
 
   // Parse blob
   blobSkipPosition = 1;
@@ -182,15 +193,19 @@ std::string LoginBlob::toJson() {
 
 void LoginBlob::loadZeroconfQuery(
     std::map<std::string, std::string>& queryParams) {
-  // Get all urlencoded params
   auto username = queryParams["userName"];
   auto blobString = queryParams["blob"];
   auto clientKeyString = queryParams["clientKey"];
   auto deviceName = queryParams["deviceName"];
 
-  // client key and bytes are urlencoded
+  CSPOT_LOG(info, "ZC: user='%s' blob_str_len=%zu ckey_str_len=%zu",
+            username.c_str(), blobString.size(), clientKeyString.size());
+
   auto clientKeyBytes = crypto->base64Decode(clientKeyString);
   auto blobBytes = crypto->base64Decode(blobString);
+
+  CSPOT_LOG(info, "ZC: blob_bytes=%zu ckey_bytes=%zu",
+            blobBytes.size(), clientKeyBytes.size());
 
   // Generated secret based on earlier generated DH
   auto secretKey = crypto->dhCalculateShared(clientKeyBytes);
@@ -199,9 +214,9 @@ void LoginBlob::loadZeroconfQuery(
 }
 
 std::string LoginBlob::buildZeroconfInfo() {
-  // Encode publicKey into base64
-
   auto encodedKey = crypto->base64Encode(crypto->publicKey);
+  CSPOT_LOG(info, "Sending publicKey len=%zu first20='%.20s'",
+            encodedKey.size(), encodedKey.c_str());
 #ifdef BELL_ONLY_CJSON
   cJSON* json_obj = cJSON_CreateObject();
   cJSON_AddNumberToObject(json_obj, "status", 101);

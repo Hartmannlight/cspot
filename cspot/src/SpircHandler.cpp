@@ -131,14 +131,13 @@ void SpircHandler::handleFrame(std::vector<uint8_t>& data) {
     case MessageType_kMessageTypeNotify: {
       CSPOT_LOG(debug, "Notify frame");
 
-      // Pause the playback if another player took control
+      // Another device sent a Notify saying it's active. We just received a Load
+      // so we are the intended target — don't stop, just mark inactive so we
+      // don't fight for control. The player keeps running; audio will flow once
+      // TrackPlayer finishes loading the current track.
       if (playbackState->isActive() &&
           playbackState->remoteFrame.device_state.is_active) {
-        CSPOT_LOG(debug, "Another player took control, pausing playback");
-        playbackState->setActive(false);
-
-        this->trackPlayer->stop();
-        sendEvent(EventType::DISC);
+        CSPOT_LOG(debug, "Another player took control, ignoring (we have a Load)");
       }
       break;
     }
