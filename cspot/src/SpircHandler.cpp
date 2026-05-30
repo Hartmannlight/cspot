@@ -133,8 +133,15 @@ void SpircHandler::handleFrame(std::vector<uint8_t>& data) {
 
       if (playbackState->isActive() &&
           playbackState->remoteFrame.device_state.is_active) {
-        CSPOT_LOG(debug, "Another player took control, stopping");
-        sendEvent(EventType::DISC);
+        // Ignore our own Notify (Mercury echoes it back to us after every notify()).
+        // Only stop when a genuinely different device claims control.
+        const char* remoteName = playbackState->remoteFrame.device_state.name;
+        bool isSelf = remoteName &&
+                      (ctx->config.deviceName == remoteName);
+        if (!isSelf) {
+          CSPOT_LOG(debug, "Another player took control, stopping");
+          sendEvent(EventType::DISC);
+        }
       }
       break;
     }
