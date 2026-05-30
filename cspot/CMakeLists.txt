@@ -25,9 +25,21 @@ else()
 endif()
 
 # Build protobuf code
-set(NANOPB_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}")
-file(GLOB PROTOS protobuf/*.proto)
-nanopb_generate_cpp(PROTO_SRCS PROTO_HDRS RELPATH ${CMAKE_CURRENT_SOURCE_DIR} ${PROTOS})
+# Use pre-generated files when available (avoids nanopb Python protobuf version conflicts).
+# The pre-generated directory lives at <project_root>/proto_generated relative to this file.
+set(_PREGENERATED "${CMAKE_CURRENT_SOURCE_DIR}/../../../proto_generated")
+if(EXISTS "${_PREGENERATED}")
+    file(GLOB PROTO_SRCS "${_PREGENERATED}/protobuf/*.c")
+    file(GLOB PROTO_HDRS "${_PREGENERATED}/protobuf/*.h")
+    set(_PROTO_INCLUDE_DIR "${_PREGENERATED}")
+    message(STATUS "cspot: using pre-generated protobuf files from ${_PREGENERATED}")
+else()
+    set(NANOPB_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}")
+    file(GLOB PROTOS protobuf/*.proto)
+    nanopb_generate_cpp(PROTO_SRCS PROTO_HDRS RELPATH ${CMAKE_CURRENT_SOURCE_DIR} ${PROTOS})
+    set(_PROTO_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 add_custom_target(generate_proto_sources DEPENDS ${PROTO_SRCS} ${PROTO_HDRS})
 set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
 
@@ -36,4 +48,4 @@ add_library(cspot STATIC ${SOURCES} ${PROTO_SRCS})
 target_compile_definitions(bell PUBLIC PB_ENABLE_MALLOC)
 target_compile_definitions(bell PUBLIC PB_FIELD_32BIT)
 target_link_libraries(cspot PUBLIC ${EXTRA_LIBS})
-target_include_directories(cspot PUBLIC "include" ${CMAKE_CURRENT_BINARY_DIR} ${NANOPB_INCLUDE_DIRS} ${EXTRA_INCLUDES})
+target_include_directories(cspot PUBLIC "include" ${_PROTO_INCLUDE_DIR} ${NANOPB_INCLUDE_DIRS} ${EXTRA_INCLUDES})
