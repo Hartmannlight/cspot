@@ -24,13 +24,14 @@
 #include <CSpotContext.h>
 #include <LoginBlob.h>
 #include <SpircHandler.h>
+#include <TrackPlayer.h>
 
 #include <inttypes.h>
 #include "BellTask.h"
 #include "CircularBuffer.h"
 
 #include "BellUtils.h"
-#include "ES8311AudioSink.h"
+
 #include "ESPStatusLed.h"
 #include "Logger.h"
 #include "freertos/ringbuf.h"
@@ -70,7 +71,7 @@ void app_main(void);
 class CSpotPlayer : public bell::Task {
  private:
   std::shared_ptr<cspot::SpircHandler> handler;
-  std::unique_ptr<ES8311AudioSink> audioSink;
+  std::unique_ptr<ES8388AudioSink> audioSink;
   std::unique_ptr<bell::CircularBuffer> circularBuffer;
   std::atomic<bool> isPaused;
 
@@ -78,7 +79,7 @@ class CSpotPlayer : public bell::Task {
   CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
       : bell::Task("cspot", 8 * 1024, 0, 0) {
     this->handler = handler;
-    this->audioSink = std::make_unique<ES8311AudioSink>();
+    this->audioSink = std::make_unique<ES8388AudioSink>();
     this->audioSink->setParams(44100, 2, 16);
     this->audioSink->volumeChanged(160);
 
@@ -86,7 +87,7 @@ class CSpotPlayer : public bell::Task {
         std::make_unique<bell::CircularBuffer>(1024 * 128 * 8);
 
     this->handler->getTrackPlayer()->setDataCallback(
-        [this](uint8_t* data, size_t bytes) { this->feedData(data, bytes); });
+        [this](uint8_t* data, size_t bytes, std::string_view trackId) { return this->feedData(data, bytes, trackId); });
     this->isPaused = false;
 
     this->handler->setEventHandler(
@@ -103,6 +104,10 @@ class CSpotPlayer : public bell::Task {
               break;
             case cspot::SpircHandler::EventType::PLAYBACK_START:
               this->circularBuffer->emptyBuffer();
+              break;
+            case cspot::SpircHandler::EventType::VOLUME:
+              this->audioSink->volumeChanged(std::get<int>(event->data));
+              break;
             default:
               break;
           }
@@ -110,7 +115,7 @@ class CSpotPlayer : public bell::Task {
     startTask();
   }
 
-  void feedData(uint8_t* data, size_t len) {
+  size_t feedData(uint8_t* data, size_t len, std::string_view trackId) {
     size_t toWrite = len;
 
     while (toWrite > 0) {
@@ -122,6 +127,8 @@ class CSpotPlayer : public bell::Task {
 
       toWrite -= written;
     }
+    
+    return len;
   }
 
   void runTask() {
@@ -151,15 +158,17 @@ class CSpotTask : public bell::Task {
     mdns_hostname_set("cspot");
     std::atomic<bool> gotBlob = false;
 
-    auto blob = std::make_shared<LoginBlob>(DEVICE_NAME);
+    auto blob = std::make_shared<cspot::LoginBlob>(DEVICE_NAME);
 
     auto server = std::make_unique<bell::BellHTTPServer>(8080);
     server->registerGet(
         "/spotify_info", [&server, blob](struct mg_connection* conn) {
+          BELL_LOG(info, "cspot", "GET /spotify_info received!");
           return server->makeJsonResponse(blob->buildZeroconfInfo());
         });
     server->registerPost(
         "/spotify_info", [&server, blob, &gotBlob](struct mg_connection* conn) {
+          BELL_LOG(info, "cspot", "POST /spotify_info received!");
           nlohmann::json obj;
           obj["status"] = 101;
           obj["spotifyError"] = 0;
@@ -168,6 +177,7 @@ class CSpotTask : public bell::Task {
           std::string body = "";
           auto requestInfo = mg_get_request_info(conn);
           if (requestInfo->content_length > 0) {
+            BELL_LOG(info, "cspot", "Content length: %d", (int)requestInfo->content_length);
             body.resize(requestInfo->content_length);
             mg_read(conn, body.data(), requestInfo->content_length);
 
@@ -180,10 +190,16 @@ class CSpotTask : public bell::Task {
             }
 
             blob->loadZeroconfQuery(queryMap);
+            BELL_LOG(info, "cspot", "Setting gotBlob = true!");
             gotBlob = true;
+          } else {
+            BELL_LOG(error, "cspot", "POST received but no content length!");
           }
 
-          return server->makeJsonResponse(obj.dump());
+          auto resp = server->makeJsonResponse(obj.dump());
+          BELL_LOG(info, "cspot", "POST response created. Sleeping slightly to avoid race.");
+          BELL_SLEEP_MS(500); // Give civetweb time to send response before destruction
+          return resp;
         });
 
     bell::MDNSService::registerService(
@@ -371,6 +387,8 @@ void init_spiffs() {
   }
 }
 
+#include "wifi_prov.h"
+
 void app_main(void) {
   // statusLed = std::make_shared<ESPStatusLed>();
   // statusLed->setStatus(StatusLed::IDLE);
@@ -390,7 +408,8 @@ void app_main(void) {
   esp_wifi_set_ps(WIFI_PS_NONE);
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
-  ESP_ERROR_CHECK(example_connect());
+  
+  start_wifi_prov();
 
   // statusLed->setStatus(StatusLed::WIFI_CONNECTED);
 

@@ -58,45 +58,48 @@ void AccessKeyFetcher::updateAccessKey() {
   }
   keyPending = true;
 
-  std::string body = "grant_type=client_credentials"
-                     "&client_id=" + ctx->config.clientId +
-                     "&client_secret=" + ctx->config.clientSecret;
+  auto timeProvider = this->ctx->timeProvider;
+  
+  std::string url = string_format(
+      "hm://keymaster/token/authenticated?client_id=9a8d2f0ce77a4e248bb71fefcb557637&device_id=%s&scope=streaming",
+      this->ctx->config.deviceId.c_str());
 
-  CSPOT_LOG(info, "Fetching access token via client credentials...");
-
-  auto response = bell::HTTPClient::post(
-      "https://accounts.spotify.com/api/token",
-      {{"Content-Type", "application/x-www-form-urlencoded"}},
-      std::vector<uint8_t>(body.begin(), body.end()));
-
-  auto result = response->body();
-
+  ctx->session->execute(
+      cspot::MercurySession::RequestType::GET, url,
+      [this, timeProvider](cspot::MercurySession::Response& res) {
+        if (res.fail || res.parts.empty()) {
+           CSPOT_LOG(error, "Mercury request failed");
+           this->keyPending = false;
+           return;
+        }
+        char* accessKeyJson = (char*)res.parts[0].data();
+        auto accessJSON = std::string(accessKeyJson, strrchr(accessKeyJson, '}') - accessKeyJson + 1);
 #ifdef BELL_ONLY_CJSON
-  cJSON* json = cJSON_Parse(result.data());
-  if (json) {
-    cJSON* token = cJSON_GetObjectItem(json, "access_token");
-    cJSON* expires = cJSON_GetObjectItem(json, "expires_in");
-    if (token && token->valuestring) {
-      accessKey = token->valuestring;
-      int expiresIn = expires ? expires->valueint / 2 : 1800;
-      this->expiresAt = ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000LL);
-      CSPOT_LOG(info, "Access token fetched successfully");
-    } else {
-      CSPOT_LOG(error, "No access_token in response");
-    }
-    cJSON_Delete(json);
-  }
+        cJSON* jsonBody = cJSON_Parse(accessJSON.c_str());
+        if (jsonBody) {
+           cJSON* token = cJSON_GetObjectItem(jsonBody, "accessToken");
+           cJSON* expires = cJSON_GetObjectItem(jsonBody, "expiresIn");
+           if (token && token->valuestring) {
+              this->accessKey = token->valuestring;
+              int expiresIn = expires ? expires->valueint / 2 : 1800;
+              this->expiresAt = timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
+              CSPOT_LOG(info, "Access token fetched successfully");
+           } else {
+              CSPOT_LOG(error, "No accessToken in response");
+           }
+           cJSON_Delete(jsonBody);
+        }
 #else
-  auto json = nlohmann::json::parse(result, nullptr, false);
-  if (!json.is_discarded() && json.contains("access_token")) {
-    accessKey = json["access_token"];
-    int expiresIn = json.value("expires_in", 3600) / 2;
-    this->expiresAt = ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000LL);
-    CSPOT_LOG(info, "Access token fetched successfully");
-  } else {
-    CSPOT_LOG(error, "Failed to fetch access token");
-  }
+        auto jsonBody = nlohmann::json::parse(accessJSON, nullptr, false);
+        if (!jsonBody.is_discarded() && jsonBody.contains("accessToken")) {
+           this->accessKey = jsonBody["accessToken"];
+           int expiresIn = jsonBody.value("expiresIn", 3600) / 2;
+           this->expiresAt = timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
+           CSPOT_LOG(info, "Access token fetched successfully");
+        } else {
+           CSPOT_LOG(error, "Failed to fetch access token! Response: %s", accessJSON.c_str());
+        }
 #endif
-
-  keyPending = false;
+        this->keyPending = false;
+      });
 }

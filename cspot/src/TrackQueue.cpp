@@ -300,6 +300,7 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
         continue;
       }
       if (sc != 200) {
+        CSPOT_LOG(error, "CDN URL HTTP error %d, body: %.*s", sc, (int)result.size(), result.data());
         throw std::runtime_error("CDN URL HTTP error " + std::to_string(sc));
       }
 

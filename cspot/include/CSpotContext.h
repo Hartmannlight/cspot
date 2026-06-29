@@ -73,7 +73,7 @@ struct Context {
     ctx->config.deviceId = blob->getDeviceId();
     ctx->config.deviceName = blob->getDeviceName();
     ctx->config.authData = blob->authData;
-    ctx->config.volume = 0;
+    ctx->config.volume = 65536;
     ctx->config.username = blob->getUserName();
 
     return ctx;
